@@ -14,9 +14,6 @@
         <h1>ListaCOD</h1>
         <p class="subtitle">Consulta por COD e registro de itens que saíram</p>
       </div>
-      <div class="base-status">
-        <span id="statusBase" class="badge badge-ok">Carregando base...</span>
-      </div>
     </div>
   </header>
 
@@ -49,7 +46,7 @@
       </div>
 
       <form id="formSaida">
-        <div class="two-cols">
+        <div class="three-cols">
           <div class="field">
             <label for="qtdSaida">Quantidade</label>
             <input
@@ -60,6 +57,15 @@
               placeholder="Ex: 2"
               required
             />
+          </div>
+
+          <div class="field">
+            <label for="unidadeSaida">Unidade</label>
+            <select id="unidadeSaida" required>
+              <option value="cx">Caixas (cx)</option>
+              <option value="un">Unidades (un)</option>
+              <option value="kg">Kg (kg)</option>
+            </select>
           </div>
 
           <div class="field">

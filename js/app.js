@@ -6,7 +6,6 @@ let listaAtual = [];
 let itemSelecionado = null;
 
 const el = {
-  statusBase: document.getElementById("statusBase"),
   codInput: document.getElementById("codInput"),
   sugestoesCod: document.getElementById("sugestoesCod"),
   btnLimparBusca: document.getElementById("btnLimparBusca"),
@@ -16,6 +15,7 @@ const el = {
   prevDescricao: document.getElementById("prevDescricao"),
   formSaida: document.getElementById("formSaida"),
   qtdSaida: document.getElementById("qtdSaida"),
+  unidadeSaida: document.getElementById("unidadeSaida"),
   formaSaida: document.getElementById("formaSaida"),
   obsItem: document.getElementById("obsItem"),
   opNumero: document.getElementById("opNumero"),
@@ -32,6 +32,19 @@ const el = {
 
 function normalizarCodigo(val) {
   return String(val ?? "").trim();
+}
+
+function normalizarUnidade(un) {
+  const u = String(un ?? "un").trim().toLowerCase();
+  if (u === "cx" || u === "caixa" || u === "caixas") return "cx";
+  if (u === "kg" || u === "quilo" || u === "quilos") return "kg";
+  return "un";
+}
+
+function formatarNumero(num) {
+  return Number(num || 0).toLocaleString("pt-BR", {
+    maximumFractionDigits: 3,
+  });
 }
 
 function setFeedback(msg, tipo = "") {
@@ -70,7 +83,6 @@ function carregarBaseEmbutida() {
 
   el.sugestoesCod.innerHTML = "";
   el.sugestoesCod.appendChild(fragment);
-  el.statusBase.textContent = `Base fixa: ${count.toLocaleString("pt-BR")} itens`;
 }
 
 function carregarEstadoLocal() {
@@ -79,7 +91,10 @@ function carregarEstadoLocal() {
   const listaSalva = localStorage.getItem(STORAGE_LISTA_ATUAL_KEY);
   if (listaSalva) {
     try {
-      listaAtual = JSON.parse(listaSalva) || [];
+      listaAtual = (JSON.parse(listaSalva) || []).map((it) => ({
+        ...it,
+        unidade: normalizarUnidade(it.unidade),
+      }));
     } catch {
       listaAtual = [];
     }
@@ -136,6 +151,23 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;");
 }
 
+function montarResumoTotais(itens) {
+  const totais = { cx: 0, un: 0, kg: 0 };
+  for (const it of itens) {
+    const un = normalizarUnidade(it.unidade);
+    totais[un] += Number(it.quantidade || 0);
+  }
+
+  const partes = [];
+  for (const un of ["cx", "un", "kg"]) {
+    if (totais[un] > 0) {
+      partes.push(`${formatarNumero(totais[un])} ${un}`);
+    }
+  }
+
+  return partes.length > 0 ? partes.join(" • ") : "0";
+}
+
 function renderListaAtual() {
   if (listaAtual.length === 0) {
     el.tabelaSaidasBody.innerHTML = `
@@ -146,16 +178,18 @@ function renderListaAtual() {
     return;
   }
 
-  const totalQtd = listaAtual.reduce((acc, it) => acc + Number(it.quantidade || 0), 0);
-  el.resumoLista.textContent = `${listaAtual.length} item(ns) • Total saída: ${totalQtd}`;
+  const resumoQtd = montarResumoTotais(listaAtual);
+  el.resumoLista.textContent = `${listaAtual.length} item(ns) • Total saída: ${resumoQtd}`;
 
   el.tabelaSaidasBody.innerHTML = listaAtual
     .map(
-      (it, idx) => `
+      (it, idx) => {
+        const un = normalizarUnidade(it.unidade);
+        return `
       <tr>
         <td><strong>${escapeHtml(it.codigo)}</strong></td>
         <td>${escapeHtml(it.descricao)}</td>
-        <td><strong>${escapeHtml(String(it.quantidade))}</strong></td>
+        <td><strong>${escapeHtml(`${formatarNumero(it.quantidade)} ${un}`)}</strong></td>
         <td>${escapeHtml(it.formaSaida)}</td>
         <td>${escapeHtml(it.observacao || "—")}</td>
         <td class="no-print">
@@ -163,7 +197,8 @@ function renderListaAtual() {
             Remover
           </button>
         </td>
-      </tr>`
+      </tr>`;
+      }
     )
     .join("");
 }
@@ -189,6 +224,7 @@ function exportarExcel() {
     COD: it.codigo,
     Descricao: it.descricao,
     Quantidade: it.quantidade,
+    Unidade: normalizarUnidade(it.unidade),
     Forma_Saida: it.formaSaida,
     Observacao: it.observacao,
   }));
@@ -227,7 +263,10 @@ window.carregarListaHistorico = function (id) {
   const encontrada = hist.find((h) => h.id === id);
   if (!encontrada) return;
 
-  listaAtual = structuredClone(encontrada.itens || []);
+  listaAtual = structuredClone(encontrada.itens || []).map((it) => ({
+    ...it,
+    unidade: normalizarUnidade(it.unidade),
+  }));
   el.opNumero.value = encontrada.numero || "";
   el.opResponsavel.value = encontrada.responsavel === "—" ? "" : encontrada.responsavel;
   el.opDestino.value = encontrada.destino === "—" ? "" : encontrada.destino;
@@ -250,7 +289,7 @@ function renderHistorico() {
         <div>
           <strong>${escapeHtml(h.numero)}</strong> • ${escapeHtml(h.dataHora)}
           <div class="muted">
-            Responsável: ${escapeHtml(h.responsavel)} • Destino: ${escapeHtml(h.destino)} • ${h.itens.length} item(ns)
+            Responsável: ${escapeHtml(h.responsavel)} • Destino: ${escapeHtml(h.destino)} • ${h.itens.length} item(ns) (${escapeHtml(montarResumoTotais(h.itens || []))})
           </div>
         </div>
         <button type="button" class="btn btn-outline btn-sm" onclick="carregarListaHistorico(${h.id})">
@@ -293,6 +332,7 @@ el.formSaida.addEventListener("submit", (e) => {
     codigo: itemSelecionado.codigo,
     descricao: itemSelecionado.descricao,
     quantidade: qtd,
+    unidade: normalizarUnidade(el.unidadeSaida.value),
     formaSaida: el.formaSaida.value,
     observacao: el.obsItem.value.trim(),
   });

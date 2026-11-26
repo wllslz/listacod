@@ -61,12 +61,12 @@ h2 {
 
 .main-grid {
   display: grid;
-  grid-template-columns: 370px 1fr;
+  grid-template-columns: 390px 1fr;
   gap: 16px;
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .main-grid {
     grid-template-columns: 1fr;
   }
@@ -113,14 +113,14 @@ select:focus {
   gap: 8px;
 }
 
-.two-cols {
+.three-cols {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: 8px;
 }
 
-@media (max-width: 520px) {
-  .two-cols {
+@media (max-width: 560px) {
+  .three-cols {
     grid-template-columns: 1fr;
   }
 }
@@ -191,18 +191,6 @@ select:focus {
 .btn-ghost {
   background: #f1f5f9;
   color: var(--text);
-}
-
-.badge {
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.badge-ok {
-  background: #dcfce7;
-  color: var(--success);
 }
 
 .feedback {
