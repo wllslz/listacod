@@ -51,6 +51,13 @@
     return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  function limparNomeBloqueado(valor) {
+    const limpo = String(valor ?? "").trim();
+    if (!limpo) return "";
+    if (/^paulo$/i.test(limpo)) return "";
+    return limpo.replace(/\s*-\s*paulo\b/gi, "").trim();
+  }
+
   function normalizarUnidade(valor) {
     const u = String(valor || "cx").trim().toLowerCase();
     return UNIDADES_VALIDAS.includes(u) ? u : "cx";
@@ -257,7 +264,10 @@
       if (salvoHist) {
         const parsed = JSON.parse(salvoHist);
         if (Array.isArray(parsed)) {
-          historicoListas = parsed;
+          historicoListas = parsed.map((reg) => ({
+            ...reg,
+            responsavel: limparNomeBloqueado(reg.responsavel)
+          }));
         }
       }
     } catch {
@@ -333,13 +343,14 @@
       .map((registro) => {
         const qtdItens = Array.isArray(registro.itens) ? registro.itens.length : 0;
         const resumo = montarResumoTotais(registro.itens || []);
+        const respLimpo = limparNomeBloqueado(registro.responsavel);
         return `
           <article class="item-historico">
             <div class="item-historico-info">
-              <strong>${escaparHtml(registro.numero || "Lista sem nome")}</strong>
+              <strong>${escaparHtml(limparNomeBloqueado(registro.numero) || "Lista sem nome")}</strong>
               <span>
                 Data: ${escaparHtml(registro.dataHora)} •
-                Resp.: ${escaparHtml(registro.responsavel || "—")} •
+                Resp.: ${escaparHtml(respLimpo || "—")} •
                 Itens: ${qtdItens} •
                 Total: ${escaparHtml(resumo)}
               </span>
@@ -383,9 +394,9 @@
       unidade: normalizarUnidade(item.unidade)
     }));
 
-    if (els.opNumero) els.opNumero.value = encontrada.numero || "";
-    if (els.opResponsavel) els.opResponsavel.value = encontrada.responsavel || "";
-    if (els.opDestino) els.opDestino.value = encontrada.destino || "";
+    if (els.opNumero) els.opNumero.value = limparNomeBloqueado(encontrada.numero);
+    if (els.opResponsavel) els.opResponsavel.value = limparNomeBloqueado(encontrada.responsavel);
+    if (els.opDestino) els.opDestino.value = limparNomeBloqueado(encontrada.destino);
 
     salvarEstadoAtual();
     renderizarListaAtual();
@@ -448,14 +459,14 @@
       return;
     }
 
-    const numeroInformado = (els.opNumero?.value || "").trim();
+    const numeroInformado = limparNomeBloqueado(els.opNumero?.value);
     const numeroFinal = numeroInformado || `Saída ${formatarDataHora()}`;
 
     const registro = {
       id: gerarId(),
       numero: numeroFinal,
-      responsavel: (els.opResponsavel?.value || "").trim(),
-      destino: (els.opDestino?.value || "").trim(),
+      responsavel: limparNomeBloqueado(els.opResponsavel?.value),
+      destino: limparNomeBloqueado(els.opDestino?.value),
       dataHora: formatarDataHora(),
       itens: listaAtual.map((item) => ({
         ...item,
@@ -484,10 +495,9 @@
       return;
     }
 
-    const numeroLista = (els.opNumero?.value || "").trim();
-    const responsavelDigitado = (els.opResponsavel?.value || "").trim();
-    const responsavel = responsavelDigitado.toLowerCase() === "paulo" ? "" : responsavelDigitado;
-    const destino = (els.opDestino?.value || "").trim();
+    const numeroLista = limparNomeBloqueado(els.opNumero?.value);
+    const responsavel = limparNomeBloqueado(els.opResponsavel?.value);
+    const destino = limparNomeBloqueado(els.opDestino?.value);
     const dataHoje = formatarDataCurta();
 
     const bordaFina = {
@@ -497,9 +507,8 @@
       right: { style: "thin", color: { rgb: "000000" } }
     };
 
-    const estiloLogoFennix = {
-      font: { name: "Aptos", sz: 18, bold: true, color: { rgb: "FFFFFF" } },
-      fill: { patternType: "solid", fgColor: { rgb: "18202C" } },
+    const estiloMarcaTopo = {
+      font: { name: "Aptos", sz: 18, bold: true, color: { rgb: "B22222" } },
       alignment: { horizontal: "center", vertical: "center" }
     };
 
@@ -555,7 +564,7 @@
 
     const ws = {};
     const merges = [
-      { s: { r: 1, c: 1 }, e: { r: 2, c: 2 } },
+      { s: { r: 1, c: 1 }, e: { r: 3, c: 2 } },
       { s: { r: 6, c: 0 }, e: { r: 6, c: 3 } }
     ];
 
@@ -563,13 +572,16 @@
     for (let r = 0; r < 6; r++) {
       rowHeights[r] = { hpt: 18 };
     }
-    rowHeights[1] = { hpt: 20 };
-    rowHeights[2] = { hpt: 20 };
+    rowHeights[1] = { hpt: 18 };
+    rowHeights[2] = { hpt: 18 };
+    rowHeights[3] = { hpt: 18 };
 
-    ws["B2"] = { v: "FENNIX", t: "s", s: estiloLogoFennix };
-    ws["C2"] = { v: "", t: "s", s: estiloLogoFennix };
-    ws["B3"] = { v: "", t: "s", s: estiloLogoFennix };
-    ws["C3"] = { v: "", t: "s", s: estiloLogoFennix };
+    ws["B2"] = { v: "FENNIX", t: "s", s: estiloMarcaTopo };
+    ws["C2"] = { v: "", t: "s", s: estiloMarcaTopo };
+    ws["B3"] = { v: "", t: "s", s: estiloMarcaTopo };
+    ws["C3"] = { v: "", t: "s", s: estiloMarcaTopo };
+    ws["B4"] = { v: "", t: "s", s: estiloMarcaTopo };
+    ws["C4"] = { v: "", t: "s", s: estiloMarcaTopo };
 
     const tituloCautela = numeroLista ? `CAUTELA DE SAIDA - ${numeroLista.toUpperCase()}` : "CAUTELA DE SAIDA";
     ws["A7"] = { v: tituloCautela, t: "s", s: estiloTitulo };
