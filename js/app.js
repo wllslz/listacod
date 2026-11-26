@@ -151,20 +151,23 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;");
 }
 
-function montarResumoTotais(itens) {
+function calcularTotaisPorUnidade(itens) {
   const totais = { cx: 0, un: 0, kg: 0 };
   for (const it of itens) {
     const un = normalizarUnidade(it.unidade);
     totais[un] += Number(it.quantidade || 0);
   }
+  return totais;
+}
 
+function montarResumoTotais(itens) {
+  const totais = calcularTotaisPorUnidade(itens);
   const partes = [];
   for (const un of ["cx", "un", "kg"]) {
     if (totais[un] > 0) {
       partes.push(`${formatarNumero(totais[un])} ${un}`);
     }
   }
-
   return partes.length > 0 ? partes.join(" • ") : "0";
 }
 
@@ -182,10 +185,9 @@ function renderListaAtual() {
   el.resumoLista.textContent = `${listaAtual.length} item(ns) • Total saída: ${resumoQtd}`;
 
   el.tabelaSaidasBody.innerHTML = listaAtual
-    .map(
-      (it, idx) => {
-        const un = normalizarUnidade(it.unidade);
-        return `
+    .map((it, idx) => {
+      const un = normalizarUnidade(it.unidade);
+      return `
       <tr>
         <td><strong>${escapeHtml(it.codigo)}</strong></td>
         <td>${escapeHtml(it.descricao)}</td>
@@ -198,8 +200,7 @@ function renderListaAtual() {
           </button>
         </td>
       </tr>`;
-      }
-    )
+    })
     .join("");
 }
 
@@ -215,26 +216,236 @@ function exportarExcel() {
     return;
   }
 
+  const listaId = el.opNumero.value.trim() || "SEM-NUMERO";
+  const responsavel = el.opResponsavel.value.trim() || "Não informado";
+  const destino = el.opDestino.value.trim() || "Não informado";
   const dataHora = new Date().toLocaleString("pt-BR");
-  const linhas = listaAtual.map((it) => ({
-    Lista: el.opNumero.value.trim() || "SEM-NUMERO",
-    Data_Hora: dataHora,
-    Responsavel: el.opResponsavel.value.trim(),
-    Destino: el.opDestino.value.trim(),
-    COD: it.codigo,
-    Descricao: it.descricao,
-    Quantidade: it.quantidade,
-    Unidade: normalizarUnidade(it.unidade),
-    Forma_Saida: it.formaSaida,
-    Observacao: it.observacao,
-  }));
+  const totais = calcularTotaisPorUnidade(listaAtual);
 
-  const ws = XLSX.utils.json_to_sheet(linhas);
+  const bordaFina = {
+    top: { style: "thin", color: { rgb: "CBD5E1" } },
+    bottom: { style: "thin", color: { rgb: "CBD5E1" } },
+    left: { style: "thin", color: { rgb: "CBD5E1" } },
+    right: { style: "thin", color: { rgb: "CBD5E1" } },
+  };
+
+  const estiloTitulo = {
+    font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "1E3A8A" } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+
+  const estiloSubtitulo = {
+    font: { name: "Calibri", sz: 10, italic: true, color: { rgb: "DBEAFE" } },
+    fill: { fgColor: { rgb: "1E3A8A" } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+
+  const estiloMetaLabel = {
+    font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "334155" } },
+    fill: { fgColor: { rgb: "F1F5F9" } },
+    border: bordaFina,
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+
+  const estiloMetaValor = {
+    font: { name: "Calibri", sz: 10, color: { rgb: "0F172A" } },
+    fill: { fgColor: { rgb: "FFFFFF" } },
+    border: bordaFina,
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+
+  const estiloHeaderTabela = {
+    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "1D4ED8" } },
+    border: bordaFina,
+    alignment: { horizontal: "center", vertical: "center" },
+  };
+
+  const estiloHeaderTabelaEsq = {
+    ...estiloHeaderTabela,
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+
+  const estiloTotalLabel = {
+    font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "1E3A8A" } },
+    fill: { fgColor: { rgb: "EFF6FF" } },
+    border: bordaFina,
+    alignment: { horizontal: "right", vertical: "center" },
+  };
+
+  const estiloTotalValor = {
+    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "0F172A" } },
+    fill: { fgColor: { rgb: "EFF6FF" } },
+    border: bordaFina,
+    alignment: { horizontal: "center", vertical: "center" },
+  };
+
+  const ws = {};
+  const setCell = (r, c, value, style, numFmt) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    const cell = { v: value, t: typeof value === "number" ? "n" : "s", s: style };
+    if (numFmt) cell.z = numFmt;
+    ws[addr] = cell;
+  };
+
+  // Linha 0 e 1: Banner Superior (colunas A..G)
+  for (let c = 0; c < 7; c++) {
+    setCell(0, c, c === 0 ? "LISTACOD — RELATÓRIO DE SAÍDA DE MATERIAIS" : "", estiloTitulo);
+    setCell(1, c, c === 0 ? `Gerado em ${dataHora}` : "", estiloSubtitulo);
+  }
+
+  // Linha 3 e 4: Metadados da Operação
+  setCell(3, 0, "Lista:", estiloMetaLabel);
+  setCell(3, 1, listaId, estiloMetaValor);
+  setCell(3, 2, "", estiloMetaValor);
+  setCell(3, 3, "Data / Hora:", estiloMetaLabel);
+  setCell(3, 4, dataHora, estiloMetaValor);
+  setCell(3, 5, "", estiloMetaValor);
+  setCell(3, 6, "", estiloMetaValor);
+
+  setCell(4, 0, "Responsável:", estiloMetaLabel);
+  setCell(4, 1, responsavel, estiloMetaValor);
+  setCell(4, 2, "", estiloMetaValor);
+  setCell(4, 3, "Destino / Obs.:", estiloMetaLabel);
+  setCell(4, 4, destino, estiloMetaValor);
+  setCell(4, 5, "", estiloMetaValor);
+  setCell(4, 6, "", estiloMetaValor);
+
+  // Linha 6: Cabeçalho da Tabela
+  const headers = [
+    { text: "#", style: estiloHeaderTabela },
+    { text: "COD", style: estiloHeaderTabela },
+    { text: "Descrição do Item", style: estiloHeaderTabelaEsq },
+    { text: "Quantidade", style: estiloHeaderTabela },
+    { text: "Unidade", style: estiloHeaderTabela },
+    { text: "Forma de Saída", style: estiloHeaderTabela },
+    { text: "Observação", style: estiloHeaderTabelaEsq },
+  ];
+  headers.forEach((h, idx) => setCell(6, idx, h.text, h.style));
+
+  // Linhas de Itens (a partir da linha 7)
+  let maxDescLen = 28;
+  let maxObsLen = 18;
+
+  listaAtual.forEach((it, idx) => {
+    const r = 7 + idx;
+    const zebra = idx % 2 === 1 ? "F8FAFC" : "FFFFFF";
+    const un = normalizarUnidade(it.unidade);
+    const desc = String(it.descricao || "");
+    const obs = String(it.observacao || "—");
+
+    if (desc.length > maxDescLen) maxDescLen = Math.min(desc.length + 4, 58);
+    if (obs.length > maxObsLen) maxObsLen = Math.min(obs.length + 4, 36);
+
+    const baseCell = {
+      font: { name: "Calibri", sz: 10, color: { rgb: "1E293B" } },
+      fill: { fgColor: { rgb: zebra } },
+      border: bordaFina,
+      alignment: { vertical: "center" },
+    };
+
+    setCell(r, 0, idx + 1, { ...baseCell, alignment: { horizontal: "center", vertical: "center" } });
+    setCell(r, 1, String(it.codigo), {
+      ...baseCell,
+      font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "0F172A" } },
+      alignment: { horizontal: "center", vertical: "center" },
+    });
+    setCell(r, 2, desc, {
+      ...baseCell,
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+    });
+    setCell(
+      r,
+      3,
+      Number(it.quantidade),
+      {
+        ...baseCell,
+        font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "0F172A" } },
+        alignment: { horizontal: "right", vertical: "center" },
+      },
+      "#,##0.###"
+    );
+    setCell(r, 4, un, {
+      ...baseCell,
+      font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "1D4ED8" } },
+      alignment: { horizontal: "center", vertical: "center" },
+    });
+    setCell(r, 5, String(it.formaSaida || ""), {
+      ...baseCell,
+      alignment: { horizontal: "center", vertical: "center" },
+    });
+    setCell(r, 6, obs, {
+      ...baseCell,
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+    });
+  });
+
+  // Bloco de Resumo / Totais ao final
+  const rResumo = 7 + listaAtual.length + 1;
+  const linhasResumo = [
+    ["Total de Itens Registrados:", listaAtual.length, "item(ns)"],
+    ["Total em Caixas (cx):", totais.cx, "cx"],
+    ["Total em Unidades (un):", totais.un, "un"],
+    ["Total em Quilos (kg):", totais.kg, "kg"],
+  ];
+
+  linhasResumo.forEach(([rotulo, valor, sufixo], i) => {
+    const r = rResumo + i;
+    setCell(r, 0, "", estiloTotalLabel);
+    setCell(r, 1, "", estiloTotalLabel);
+    setCell(r, 2, rotulo, estiloTotalLabel);
+    setCell(r, 3, Number(valor), { ...estiloTotalValor, alignment: { horizontal: "right", vertical: "center" } }, "#,##0.###");
+    setCell(r, 4, sufixo, estiloTotalValor);
+  });
+
+  const ultimaLinha = rResumo + linhasResumo.length - 1;
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: ultimaLinha, c: 6 } });
+
+  // Mesclagens de células
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+    { s: { r: 3, c: 1 }, e: { r: 3, c: 2 } },
+    { s: { r: 3, c: 4 }, e: { r: 3, c: 6 } },
+    { s: { r: 4, c: 1 }, e: { r: 4, c: 2 } },
+    { s: { r: 4, c: 4 }, e: { r: 4, c: 6 } },
+    ...linhasResumo.map((_, i) => ({
+      s: { r: rResumo + i, c: 0 },
+      e: { r: rResumo + i, c: 2 },
+    })),
+  ];
+
+  // Largura das colunas e altura das linhas
+  ws["!cols"] = [
+    { wch: 6 },
+    { wch: 14 },
+    { wch: maxDescLen },
+    { wch: 14 },
+    { wch: 11 },
+    { wch: 20 },
+    { wch: maxObsLen },
+  ];
+
+  ws["!rows"] = [
+    { hpt: 26 },
+    { hpt: 18 },
+    { hpt: 8 },
+    { hpt: 20 },
+    { hpt: 20 },
+    { hpt: 10 },
+    { hpt: 24 },
+    ...listaAtual.map(() => ({ hpt: 21 })),
+    { hpt: 10 },
+    ...linhasResumo.map(() => ({ hpt: 20 })),
+  ];
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Saidas");
 
-  const nomeArquivo = `${el.opNumero.value.trim() || "lista_saidas"}.xlsx`;
-  XLSX.writeFile(wb, nomeArquivo);
+  const nomeSeguro = (el.opNumero.value.trim() || "lista_saidas").replace(/[\\/:*?"<>|]/g, "-");
+  XLSX.writeFile(wb, `${nomeSeguro}.xlsx`);
+  setFeedback(`Planilha "${nomeSeguro}.xlsx" exportada com sucesso.`, "ok");
 }
 
 function salvarNoHistorico() {
