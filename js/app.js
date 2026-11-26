@@ -485,7 +485,8 @@
     }
 
     const numeroLista = (els.opNumero?.value || "").trim();
-    const responsavel = (els.opResponsavel?.value || "").trim();
+    const responsavelDigitado = (els.opResponsavel?.value || "").trim();
+    const responsavel = responsavelDigitado.toLowerCase() === "paulo" ? "" : responsavelDigitado;
     const destino = (els.opDestino?.value || "").trim();
     const dataHoje = formatarDataCurta();
 
@@ -494,6 +495,12 @@
       bottom: { style: "thin", color: { rgb: "000000" } },
       left: { style: "thin", color: { rgb: "000000" } },
       right: { style: "thin", color: { rgb: "000000" } }
+    };
+
+    const estiloLogoFennix = {
+      font: { name: "Aptos", sz: 18, bold: true, color: { rgb: "FFFFFF" } },
+      fill: { patternType: "solid", fgColor: { rgb: "18202C" } },
+      alignment: { horizontal: "center", vertical: "center" }
     };
 
     const estiloTitulo = {
@@ -548,6 +555,7 @@
 
     const ws = {};
     const merges = [
+      { s: { r: 1, c: 1 }, e: { r: 2, c: 2 } },
       { s: { r: 6, c: 0 }, e: { r: 6, c: 3 } }
     ];
 
@@ -555,6 +563,13 @@
     for (let r = 0; r < 6; r++) {
       rowHeights[r] = { hpt: 18 };
     }
+    rowHeights[1] = { hpt: 20 };
+    rowHeights[2] = { hpt: 20 };
+
+    ws["B2"] = { v: "FENNIX", t: "s", s: estiloLogoFennix };
+    ws["C2"] = { v: "", t: "s", s: estiloLogoFennix };
+    ws["B3"] = { v: "", t: "s", s: estiloLogoFennix };
+    ws["C3"] = { v: "", t: "s", s: estiloLogoFennix };
 
     const tituloCautela = numeroLista ? `CAUTELA DE SAIDA - ${numeroLista.toUpperCase()}` : "CAUTELA DE SAIDA";
     ws["A7"] = { v: tituloCautela, t: "s", s: estiloTitulo };
