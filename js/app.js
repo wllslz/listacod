@@ -7,6 +7,7 @@
   };
 
   const MAX_HISTORICO = 50;
+  const MAX_SUGESTOES = 50;
   const UNIDADES_VALIDAS = ["cx", "un", "kg"];
 
   const els = {
@@ -33,6 +34,9 @@
     btnLimparHistorico: document.getElementById("btnLimparHistorico"),
     listaHistorico: document.getElementById("listaHistorico")
   };
+
+  /** @type {Array<{ codigo: string, codigoUpper: string, descricao: string, descricaoUpper: string }>} */
+  let catalogoLista = [];
 
   /** @type {Map<string, { codigo: string, descricao: string }>} */
   const baseProdutos = new Map();
@@ -94,6 +98,8 @@
 
   function carregarBaseEmbutida() {
     baseProdutos.clear();
+    catalogoLista = [];
+
     const dados = typeof BASE_PRODUTOS_FIXA !== "undefined" && BASE_PRODUTOS_FIXA ? BASE_PRODUTOS_FIXA : {};
     const entradas = Object.entries(dados);
 
@@ -101,27 +107,46 @@
       const codigo = String(codBruto).trim();
       const descricao = String(descBruta ?? "").trim();
       if (!codigo || !descricao) continue;
-      baseProdutos.set(codigo, { codigo, descricao });
+
+      const registro = { codigo, descricao };
+      baseProdutos.set(codigo, registro);
+      catalogoLista.push({
+        codigo,
+        codigoUpper: codigo.toUpperCase(),
+        descricao,
+        descricaoUpper: descricao.toUpperCase()
+      });
     }
 
-    preencherDatalist();
+    atualizarSugestoesDatalist("");
     els.statusBase.textContent = `Base carregada: ${baseProdutos.size.toLocaleString("pt-BR")} produtos`;
   }
 
-  function preencherDatalist() {
+  function atualizarSugestoesDatalist(termoBruto = "") {
+    const termoUpper = String(termoBruto ?? "").trim().toUpperCase();
+    const matches = [];
+
+    if (!termoUpper) {
+      for (let i = 0; i < catalogoLista.length && matches.length < MAX_SUGESTOES; i++) {
+        matches.push(catalogoLista[i]);
+      }
+    } else {
+      for (let i = 0; i < catalogoLista.length && matches.length < MAX_SUGESTOES; i++) {
+        const item = catalogoLista[i];
+        if (item.codigoUpper.startsWith(termoUpper) || item.descricaoUpper.includes(termoUpper)) {
+          matches.push(item);
+        }
+      }
+    }
+
     els.sugestoesCod.innerHTML = "";
     const fragment = document.createDocumentFragment();
-    let contador = 0;
-
-    for (const item of baseProdutos.values()) {
+    for (const item of matches) {
       const opt = document.createElement("option");
       opt.value = item.codigo;
       opt.label = `${item.codigo} — ${item.descricao}`;
       fragment.appendChild(opt);
-      contador += 1;
-      if (contador >= 2000) break;
     }
-
     els.sugestoesCod.appendChild(fragment);
   }
 
@@ -143,15 +168,17 @@
     }
 
     const termoUpper = termo.toUpperCase();
-    for (const item of baseProdutos.values()) {
-      if (item.codigo.toUpperCase().startsWith(termoUpper)) {
-        return item;
+    for (const item of catalogoLista) {
+      if (item.codigoUpper.startsWith(termoUpper)) {
+        return { codigo: item.codigo, descricao: item.descricao };
       }
     }
 
-    for (const item of baseProdutos.values()) {
-      if (item.descricao.toUpperCase().includes(termoUpper)) {
-        return item;
+    if (termoUpper.length >= 2) {
+      for (const item of catalogoLista) {
+        if (item.descricaoUpper.includes(termoUpper)) {
+          return { codigo: item.codigo, descricao: item.descricao };
+        }
       }
     }
 
@@ -160,6 +187,8 @@
 
   function atualizarPreviewProduto() {
     const termo = els.inputCod.value.trim();
+    atualizarSugestoesDatalist(termo);
+
     if (!termo) {
       els.previewProduto.className = "produto-preview vazio";
       els.previewProduto.textContent = "Digite um COD para visualizar a descrição do produto.";
@@ -253,7 +282,7 @@
     if (totalItens === 0) {
       els.tbodyItens.innerHTML = `
         <tr class="linha-vazia">
-          <td colspan="7">Nenhum item adicionado ainda. Use o formulário ao lado para lançar os códigos.</td>
+          <td colspan="8">Nenhum item adicionado ainda. Use o formulário ao lado para lançar os códigos.</td>
         </tr>
       `;
       return;
@@ -504,7 +533,7 @@
 
     const ws = {};
     const merges = [
-      { s: { r: 6, c: 0 }, e: { r: 6, c: 3 } } // A7:D7 -> CAUTELA DE SAIDA
+      { s: { r: 6, c: 0 }, e: { r: 6, c: 3 } }
     ];
 
     const rowHeights = [];
@@ -512,7 +541,6 @@
       rowHeights[r] = { hpt: 18 };
     }
 
-    // Linha 7 (index 6): Título CAUTELA DE SAIDA
     const tituloCautela = numeroLista ? `CAUTELA DE SAIDA - ${numeroLista.toUpperCase()}` : "CAUTELA DE SAIDA";
     ws["A7"] = { v: tituloCautela, t: "s", s: estiloTitulo };
     ws["B7"] = { v: "", t: "s", s: estiloTitulo };
@@ -520,38 +548,31 @@
     ws["D7"] = { v: "", t: "s", s: estiloTitulo };
     rowHeights[6] = { hpt: 23.25 };
 
-    // Linha 8 (index 7): Espaço
     rowHeights[7] = { hpt: 24 };
 
-    // Linha 9 (index 8): DATA DE SEPARAÇÃO
     const textoData = `DATA DE SEPARAÇÃO    ${dataHoje}`;
     ws["B9"] = { v: textoData, t: "s", s: estiloInfoCabecalho };
     rowHeights[8] = { hpt: 24 };
 
-    // Linha 10 (index 9): RESPONSÁVEL DA SEPARAÇÃO
     const textoResp = responsavel
       ? `RESPONSÁVEL DA SEPARAÇÃO   ${responsavel.toUpperCase()}`
       : "RESPONSÁVEL DA SEPARAÇÃO   __________________ ";
     ws["B10"] = { v: textoResp, t: "s", s: estiloInfoCabecalho };
     rowHeights[9] = { hpt: 24 };
 
-    // Linha 11 (index 10): Destino / Obs geral (se preenchido) ou linha em branco
     if (destino) {
       ws["B11"] = { v: `DESTINO / OBS:   ${destino.toUpperCase()}`, t: "s", s: estiloInfoCabecalho };
     }
     rowHeights[10] = { hpt: 24 };
 
-    // Linha 12 (index 11): Espaço
     rowHeights[11] = { hpt: 18 };
 
-    // Linha 13 (index 12): Cabeçalho da tabela (Cód | DESCRICÃO | QTD | TIPO)
     ws["B13"] = { v: "Cód", t: "s", s: estiloHeaderTabela };
     ws["C13"] = { v: "DESCRICÃO ", t: "s", s: estiloHeaderTabela };
     ws["D13"] = { v: "QTD", t: "s", s: estiloHeaderTabela };
     ws["E13"] = { v: "TIPO", t: "s", s: estiloHeaderTabela };
     rowHeights[12] = { hpt: 21 };
 
-    // Linhas de itens a partir da linha 14 (index 13)
     let linhaAtual = 14;
     listaAtual.forEach((item) => {
       const codNum = Number(item.codigo);
@@ -584,13 +605,11 @@
       linhaAtual += 1;
     });
 
-    // Duas linhas em branco após os itens
     rowHeights[linhaAtual - 1] = { hpt: 21 };
     linhaAtual += 1;
     rowHeights[linhaAtual - 1] = { hpt: 21 };
     linhaAtual += 1;
 
-    // Texto de confirmação
     ws[`B${linhaAtual}`] = {
       v: "E_______________________ Confirmo a (s) saida (s) da (s) mercadoria (s) acima descrita (s)",
       t: "s",
@@ -599,11 +618,9 @@
     rowHeights[linhaAtual - 1] = { hpt: 21 };
     linhaAtual += 1;
 
-    // Linha em branco antes da assinatura
     rowHeights[linhaAtual - 1] = { hpt: 21 };
     linhaAtual += 1;
 
-    // Linha de assinatura (B:C mesclado)
     ws[`B${linhaAtual}`] = {
       v: "___________________________________________________________________________",
       t: "s",
@@ -614,7 +631,6 @@
     rowHeights[linhaAtual - 1] = { hpt: 21 };
     linhaAtual += 1;
 
-    // Rótulo RESPONSÁVEL (B:C mesclado)
     ws[`B${linhaAtual}`] = {
       v: "RESPONSÁVEL",
       t: "s",
@@ -628,14 +644,13 @@
     ws["!merges"] = merges;
     ws["!rows"] = rowHeights;
     ws["!cols"] = [
-      { wch: 3.5 },  // A (margem esquerda)
-      { wch: 14 },   // B (Cód)
-      { wch: 56 },   // C (DESCRICÃO)
-      { wch: 15 },   // D (QTD)
-      { wch: 30 }    // E (TIPO)
+      { wch: 3.5 },
+      { wch: 14 },
+      { wch: 56 },
+      { wch: 15 },
+      { wch: 30 }
     ];
 
-    // Oculta linhas de grade e configura página para impressão limpa
     ws["!views"] = [{ showGridLines: false }];
     ws["!pageSetup"] = {
       orientation: "portrait",
