@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ListaCOD — Registro de Saídas</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header class="topbar no-print">
+    <div class="container topbar-inner">
+      <div>
+        <h1>ListaCOD</h1>
+        <p class="subtitle">Consulta por COD e registro de itens que saíram</p>
+      </div>
+      <div class="base-status">
+        <span id="statusBase" class="badge badge-neutral">Base não carregada</span>
+        <label class="btn btn-outline btn-sm" for="inputBaseFile">
+          Importar Planilha (.xls / .xlsx / .csv)
+        </label>
+        <input type="file" id="inputBaseFile" accept=".xls,.xlsx,.csv" hidden />
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-grid">
+    <section class="card no-print">
+      <h2>1. Registrar Saída</h2>
+
+      <div class="field">
+        <label for="codInput">COD</label>
+        <div class="row-gap">
+          <input
+            type="text"
+            id="codInput"
+            list="sugestoesCod"
+            placeholder="Digite o COD ou parte da descrição..."
+            autocomplete="off"
+          />
+          <button type="button" id="btnLimparBusca" class="btn btn-ghost">Limpar</button>
+        </div>
+        <datalist id="sugestoesCod"></datalist>
+      </div>
+
+      <div id="feedbackMsg" class="feedback" role="status" aria-live="polite"></div>
+
+      <div id="itemPreview" class="preview-box hidden">
+        <div class="preview-header">
+          <strong id="prevCodigo">—</strong>
+        </div>
+        <p id="prevDescricao" class="preview-desc">—</p>
+      </div>
+
+      <form id="formSaida">
+        <div class="two-cols">
+          <div class="field">
+            <label for="qtdSaida">Quantidade</label>
+            <input
+              type="number"
+              id="qtdSaida"
+              step="any"
+              min="0.001"
+              placeholder="Ex: 2"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="formaSaida">Forma de saída</label>
+            <select id="formaSaida" required>
+              <option value="Venda">Venda</option>
+              <option value="Consumo interno">Consumo interno</option>
+              <option value="Transferência">Transferência</option>
+              <option value="Devolução">Devolução</option>
+              <option value="Avaria / Descarte">Avaria / Descarte</option>
+              <option value="Doação">Doação</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="obsItem">Observação (opcional)</label>
+          <input type="text" id="obsItem" placeholder="Ex: pedido, nota ou detalhe..." />
+        </div>
+
+        <button type="submit" class="btn btn-primary full-width">
+          Adicionar à Lista
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h2>2. Itens que Saíram</h2>
+          <p id="resumoLista" class="muted">0 itens • Total saída: 0</p>
+        </div>
+        <div class="actions-row no-print">
+          <button type="button" id="btnSalvarLista" class="btn btn-success btn-sm">
+            Salvar Lista
+          </button>
+          <button type="button" id="btnExportXlsx" class="btn btn-outline btn-sm">
+            Exportar Excel
+          </button>
+          <button type="button" id="btnImprimir" class="btn btn-outline btn-sm">
+            Imprimir / PDF
+          </button>
+          <button type="button" id="btnLimparLista" class="btn btn-danger btn-sm">
+            Limpar
+          </button>
+        </div>
+      </div>
+
+      <div class="operacao-bar">
+        <div class="field">
+          <label for="opNumero">Identificação da Lista</label>
+          <input type="text" id="opNumero" placeholder="Ex: SAIDA-01" />
+        </div>
+        <div class="field">
+          <label for="opResponsavel">Responsável</label>
+          <input type="text" id="opResponsavel" placeholder="Nome" />
+        </div>
+        <div class="field">
+          <label for="opDestino">Destino / Observação geral</label>
+          <input type="text" id="opDestino" placeholder="Ex: Expedição" />
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>COD</th>
+              <th>Descrição</th>
+              <th>Qtd.</th>
+              <th>Forma de Saída</th>
+              <th>Observação</th>
+              <th class="no-print">Ação</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaSaidasBody">
+            <tr class="empty-row">
+              <td colspan="6">Nenhum item adicionado. Informe um COD ao lado para começar.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <section class="container card historico-section no-print">
+    <h2>3. Listas Salvas</h2>
+    <div id="historicoContainer" class="historico-list">
+      <p class="muted">Nenhuma lista salva até o momento.</p>
+    </div>
+  </section>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
