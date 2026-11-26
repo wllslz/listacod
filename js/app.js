@@ -1,592 +1,738 @@
-const STORAGE_LISTA_ATUAL_KEY = "listacod_lista_atual_v1";
-const STORAGE_HISTORICO_KEY = "listacod_historico_v1";
+(() => {
+  "use strict";
 
-let baseProdutos = new Map(); // COD -> { codigo, descricao }
-let listaAtual = [];
-let itemSelecionado = null;
+  const STORAGE_KEYS = {
+    LISTA_ATUAL: "listacod_lista_atual_v1",
+    HISTORICO: "listacod_historico_v1"
+  };
 
-const el = {
-  codInput: document.getElementById("codInput"),
-  sugestoesCod: document.getElementById("sugestoesCod"),
-  btnLimparBusca: document.getElementById("btnLimparBusca"),
-  feedbackMsg: document.getElementById("feedbackMsg"),
-  itemPreview: document.getElementById("itemPreview"),
-  prevCodigo: document.getElementById("prevCodigo"),
-  prevDescricao: document.getElementById("prevDescricao"),
-  formSaida: document.getElementById("formSaida"),
-  qtdSaida: document.getElementById("qtdSaida"),
-  unidadeSaida: document.getElementById("unidadeSaida"),
-  formaSaida: document.getElementById("formaSaida"),
-  obsItem: document.getElementById("obsItem"),
-  opNumero: document.getElementById("opNumero"),
-  opResponsavel: document.getElementById("opResponsavel"),
-  opDestino: document.getElementById("opDestino"),
-  resumoLista: document.getElementById("resumoLista"),
-  tabelaSaidasBody: document.getElementById("tabelaSaidasBody"),
-  btnSalvarLista: document.getElementById("btnSalvarLista"),
-  btnExportXlsx: document.getElementById("btnExportXlsx"),
-  btnImprimir: document.getElementById("btnImprimir"),
-  btnLimparLista: document.getElementById("btnLimparLista"),
-  historicoContainer: document.getElementById("historicoContainer"),
-};
+  const MAX_HISTORICO = 50;
+  const UNIDADES_VALIDAS = ["cx", "un", "kg"];
 
-function normalizarCodigo(val) {
-  return String(val ?? "").trim();
-}
+  const els = {
+    statusBase: document.getElementById("statusBase"),
+    formSaida: document.getElementById("formSaida"),
+    inputCod: document.getElementById("inputCod"),
+    sugestoesCod: document.getElementById("sugestoesCod"),
+    previewProduto: document.getElementById("previewProduto"),
+    inputQtd: document.getElementById("inputQtd"),
+    selectUnidade: document.getElementById("selectUnidade"),
+    selectMotivo: document.getElementById("selectMotivo"),
+    inputObsItem: document.getElementById("inputObsItem"),
+    btnLimparCampos: document.getElementById("btnLimparCampos"),
+    inputNumeroLista: document.getElementById("inputNumeroLista"),
+    inputResponsavel: document.getElementById("inputResponsavel"),
+    inputDestino: document.getElementById("inputDestino"),
+    resumoTotais: document.getElementById("resumoTotais"),
+    tbodyItens: document.getElementById("tbodyItens"),
+    infoImpressao: document.getElementById("infoImpressao"),
+    btnSalvarLista: document.getElementById("btnSalvarLista"),
+    btnExportarExcel: document.getElementById("btnExportarExcel"),
+    btnImprimir: document.getElementById("btnImprimir"),
+    btnNovaLista: document.getElementById("btnNovaLista"),
+    btnLimparHistorico: document.getElementById("btnLimparHistorico"),
+    listaHistorico: document.getElementById("listaHistorico")
+  };
 
-function normalizarUnidade(un) {
-  const u = String(un ?? "un").trim().toLowerCase();
-  if (u === "cx" || u === "caixa" || u === "caixas") return "cx";
-  if (u === "kg" || u === "quilo" || u === "quilos") return "kg";
-  return "un";
-}
+  /** @type {Map<string, { codigo: string, descricao: string }>} */
+  const baseProdutos = new Map();
 
-function formatarNumero(num) {
-  return Number(num || 0).toLocaleString("pt-BR", {
-    maximumFractionDigits: 3,
-  });
-}
+  /** @type {Array<{ id: string, codigo: string, descricao: string, quantidade: number, unidade: string, motivo: string, obs: string }>} */
+  let listaAtual = [];
 
-function setFeedback(msg, tipo = "") {
-  el.feedbackMsg.textContent = msg;
-  el.feedbackMsg.className = `feedback ${tipo}`.trim();
-}
+  /** @type {Array<{ id: string, numero: string, responsavel: string, destino: string, dataHora: string, itens: Array<any> }>} */
+  let historicoListas = [];
 
-function salvarEstadoLocal() {
-  localStorage.setItem(STORAGE_LISTA_ATUAL_KEY, JSON.stringify(listaAtual));
-}
+  function gerarId() {
+    return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
 
-function carregarBaseEmbutida() {
-  baseProdutos.clear();
-  const fragment = document.createDocumentFragment();
-  let count = 0;
+  function normalizarUnidade(valor) {
+    const u = String(valor || "cx").trim().toLowerCase();
+    return UNIDADES_VALIDAS.includes(u) ? u : "cx";
+  }
 
-  const fonte = typeof BASE_PRODUTOS_FIXA === "object" && BASE_PRODUTOS_FIXA !== null
-    ? BASE_PRODUTOS_FIXA
-    : {};
+  function formatarNumero(valor) {
+    return Number(valor).toLocaleString("pt-BR", {
+      minimumFractionDigits: Number.isInteger(Number(valor)) ? 0 : 2,
+      maximumFractionDigits: 3
+    });
+  }
 
-  for (const [rawCod, rawDesc] of Object.entries(fonte)) {
-    const cod = normalizarCodigo(rawCod);
-    const descricao = String(rawDesc ?? "").trim();
-    if (!cod || !descricao) continue;
+  function formatarQtdComUnidade(quantidade, unidade) {
+    const u = normalizarUnidade(unidade);
+    const sufixo = u === "un" ? "unds" : u;
+    return `${formatarNumero(quantidade)}${sufixo}`;
+  }
 
-    baseProdutos.set(cod, { codigo: cod, descricao });
-    count++;
+  function formatarDataHora(date = new Date()) {
+    return date.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
 
-    if (count <= 2000) {
+  function formatarDataCurta(date = new Date()) {
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit"
+    });
+  }
+
+  function escaparHtml(texto) {
+    return String(texto ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function carregarBaseEmbutida() {
+    baseProdutos.clear();
+    const dados = typeof BASE_PRODUTOS_FIXA !== "undefined" && BASE_PRODUTOS_FIXA ? BASE_PRODUTOS_FIXA : {};
+    const entradas = Object.entries(dados);
+
+    for (const [codBruto, descBruta] of entradas) {
+      const codigo = String(codBruto).trim();
+      const descricao = String(descBruta ?? "").trim();
+      if (!codigo || !descricao) continue;
+      baseProdutos.set(codigo, { codigo, descricao });
+    }
+
+    preencherDatalist();
+    els.statusBase.textContent = `Base carregada: ${baseProdutos.size.toLocaleString("pt-BR")} produtos`;
+  }
+
+  function preencherDatalist() {
+    els.sugestoesCod.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    let contador = 0;
+
+    for (const item of baseProdutos.values()) {
       const opt = document.createElement("option");
-      opt.value = cod;
-      opt.label = `${cod} — ${descricao}`;
+      opt.value = item.codigo;
+      opt.label = `${item.codigo} — ${item.descricao}`;
       fragment.appendChild(opt);
+      contador += 1;
+      if (contador >= 2000) break;
+    }
+
+    els.sugestoesCod.appendChild(fragment);
+  }
+
+  function buscarProdutoPorEntrada(entradaBruta) {
+    const termo = String(entradaBruta ?? "").trim();
+    if (!termo) return null;
+
+    const possiveisCodigos = [
+      termo,
+      termo.split(/\s+/)[0],
+      termo.split("—")[0].trim(),
+      termo.split("-")[0].trim()
+    ];
+
+    for (const cod of possiveisCodigos) {
+      if (baseProdutos.has(cod)) {
+        return baseProdutos.get(cod);
+      }
+    }
+
+    const termoUpper = termo.toUpperCase();
+    for (const item of baseProdutos.values()) {
+      if (item.codigo.toUpperCase().startsWith(termoUpper)) {
+        return item;
+      }
+    }
+
+    for (const item of baseProdutos.values()) {
+      if (item.descricao.toUpperCase().includes(termoUpper)) {
+        return item;
+      }
+    }
+
+    return null;
+  }
+
+  function atualizarPreviewProduto() {
+    const termo = els.inputCod.value.trim();
+    if (!termo) {
+      els.previewProduto.className = "produto-preview vazio";
+      els.previewProduto.textContent = "Digite um COD para visualizar a descrição do produto.";
+      return;
+    }
+
+    const produto = buscarProdutoPorEntrada(termo);
+    if (produto) {
+      els.previewProduto.className = "produto-preview encontrado";
+      els.previewProduto.innerHTML = `<strong>COD ${escaparHtml(produto.codigo)}:</strong> ${escaparHtml(produto.descricao)}`;
+    } else {
+      els.previewProduto.className = "produto-preview nao-encontrado";
+      els.previewProduto.textContent = `COD "${termo}" não encontrado na base.`;
     }
   }
 
-  el.sugestoesCod.innerHTML = "";
-  el.sugestoesCod.appendChild(fragment);
-}
-
-function carregarEstadoLocal() {
-  carregarBaseEmbutida();
-
-  const listaSalva = localStorage.getItem(STORAGE_LISTA_ATUAL_KEY);
-  if (listaSalva) {
+  function salvarEstadoAtual() {
     try {
-      listaAtual = (JSON.parse(listaSalva) || []).map((it) => ({
-        ...it,
-        unidade: normalizarUnidade(it.unidade),
-      }));
+      localStorage.setItem(STORAGE_KEYS.LISTA_ATUAL, JSON.stringify(listaAtual));
+    } catch (erro) {
+      console.warn("Não foi possível salvar a lista atual no localStorage:", erro);
+    }
+  }
+
+  function salvarHistoricoStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEYS.HISTORICO, JSON.stringify(historicoListas));
+    } catch (erro) {
+      console.warn("Não foi possível salvar o histórico no localStorage:", erro);
+    }
+  }
+
+  function carregarEstadoStorage() {
+    try {
+      const salvaAtual = localStorage.getItem(STORAGE_KEYS.LISTA_ATUAL);
+      if (salvaAtual) {
+        const parsed = JSON.parse(salvaAtual);
+        if (Array.isArray(parsed)) {
+          listaAtual = parsed.map((item) => ({
+            ...item,
+            unidade: normalizarUnidade(item.unidade)
+          }));
+        }
+      }
     } catch {
       listaAtual = [];
     }
+
+    try {
+      const salvoHist = localStorage.getItem(STORAGE_KEYS.HISTORICO);
+      if (salvoHist) {
+        const parsed = JSON.parse(salvoHist);
+        if (Array.isArray(parsed)) {
+          historicoListas = parsed;
+        }
+      }
+    } catch {
+      historicoListas = [];
+    }
   }
 
-  renderListaAtual();
-  renderHistorico();
-}
-
-function buscarPorCodigoOuTexto(termo) {
-  const q = normalizarCodigo(termo);
-  if (!q) {
-    itemSelecionado = null;
-    el.itemPreview.classList.add("hidden");
-    setFeedback("");
-    return;
+  function calcularTotaisPorUnidade(itens) {
+    const totais = { cx: 0, un: 0, kg: 0 };
+    for (const item of itens) {
+      const u = normalizarUnidade(item.unidade);
+      totais[u] += Number(item.quantidade) || 0;
+    }
+    return totais;
   }
 
-  if (baseProdutos.has(q)) {
-    selecionarItem(baseProdutos.get(q));
-    return;
+  function montarResumoTotais(itens) {
+    const totais = calcularTotaisPorUnidade(itens);
+    const partes = [];
+    if (totais.cx > 0) partes.push(`${formatarNumero(totais.cx)} cx`);
+    if (totais.un > 0) partes.push(`${formatarNumero(totais.un)} un`);
+    if (totais.kg > 0) partes.push(`${formatarNumero(totais.kg)} kg`);
+    return partes.length > 0 ? partes.join(" | ") : "0";
   }
 
-  const lower = q.toLowerCase();
-  for (const item of baseProdutos.values()) {
-    if (
-      item.codigo.toLowerCase().startsWith(lower) ||
-      item.descricao.toLowerCase().includes(lower)
-    ) {
-      selecionarItem(item);
-      setFeedback(`Correspondência: COD ${item.codigo}`, "ok");
+  function renderizarListaAtual() {
+    const totalItens = listaAtual.length;
+    const resumoUnidades = montarResumoTotais(listaAtual);
+
+    els.resumoTotais.textContent = `${totalItens} ${totalItens === 1 ? "item" : "itens"} | Total: ${resumoUnidades}`;
+
+    const numeroLista = els.inputNumeroLista.value.trim() || "Sem identificação";
+    const responsavel = els.inputResponsavel.value.trim() || "Não informado";
+    const destino = els.inputDestino.value.trim() || "Não informado";
+    els.infoImpressao.textContent = `Lista: ${numeroLista} | Responsável: ${responsavel} | Destino/Obs: ${destino} | Emitido em: ${formatarDataHora()}`;
+
+    if (totalItens === 0) {
+      els.tbodyItens.innerHTML = `
+        <tr class="linha-vazia">
+          <td colspan="7">Nenhum item adicionado ainda. Use o formulário ao lado para lançar os códigos.</td>
+        </tr>
+      `;
       return;
     }
+
+    els.tbodyItens.innerHTML = listaAtual
+      .map((item, index) => {
+        const unidade = normalizarUnidade(item.unidade);
+        return `
+        <tr>
+          <td class="col-num">${index + 1}</td>
+          <td class="col-cod">${escaparHtml(item.codigo)}</td>
+          <td>${escaparHtml(item.descricao)}</td>
+          <td class="col-qtd">${formatarNumero(item.quantidade)}</td>
+          <td class="col-un"><span class="badge-un">${escaparHtml(unidade)}</span></td>
+          <td>${escaparHtml(item.motivo)}</td>
+          <td>${escaparHtml(item.obs || "—")}</td>
+          <td class="col-acao no-print">
+            <button type="button" class="btn-remover" data-remover-id="${escaparHtml(item.id)}" title="Remover item">Remover</button>
+          </td>
+        </tr>
+      `;
+      })
+      .join("");
   }
 
-  itemSelecionado = null;
-  el.itemPreview.classList.add("hidden");
-  setFeedback("COD não encontrado na base.", "err");
-}
-
-function selecionarItem(item) {
-  itemSelecionado = item;
-  el.prevCodigo.textContent = `COD: ${item.codigo}`;
-  el.prevDescricao.textContent = item.descricao;
-  el.itemPreview.classList.remove("hidden");
-  setFeedback("");
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function calcularTotaisPorUnidade(itens) {
-  const totais = { cx: 0, un: 0, kg: 0 };
-  for (const it of itens) {
-    const un = normalizarUnidade(it.unidade);
-    totais[un] += Number(it.quantidade || 0);
-  }
-  return totais;
-}
-
-function montarResumoTotais(itens) {
-  const totais = calcularTotaisPorUnidade(itens);
-  const partes = [];
-  for (const un of ["cx", "un", "kg"]) {
-    if (totais[un] > 0) {
-      partes.push(`${formatarNumero(totais[un])} ${un}`);
+  function renderizarHistorico() {
+    if (historicoListas.length === 0) {
+      els.listaHistorico.innerHTML = `<p class="vazio-historico">Nenhuma lista salva no histórico.</p>`;
+      return;
     }
-  }
-  return partes.length > 0 ? partes.join(" • ") : "0";
-}
 
-function renderListaAtual() {
-  if (listaAtual.length === 0) {
-    el.tabelaSaidasBody.innerHTML = `
-      <tr class="empty-row">
-        <td colspan="6">Nenhum item adicionado. Informe um COD ao lado para começar.</td>
-      </tr>`;
-    el.resumoLista.textContent = "0 itens • Total saída: 0";
-    return;
-  }
+    els.listaHistorico.innerHTML = historicoListas
+      .map((registro) => {
+        const qtdItens = Array.isArray(registro.itens) ? registro.itens.length : 0;
+        const resumo = montarResumoTotais(registro.itens || []);
+        return `
+          <article class="item-historico">
+            <div class="item-historico-info">
+              <strong>${escaparHtml(registro.numero || "Lista sem nome")}</strong>
+              <span>
+                Data: ${escaparHtml(registro.dataHora)} •
+                Resp.: ${escaparHtml(registro.responsavel || "—")} •
+                Itens: ${qtdItens} •
+                Total: ${escaparHtml(resumo)}
+              </span>
+            </div>
+            <div class="item-historico-acoes">
+              <button type="button" class="btn btn-secundario btn-abrir-historico" data-abrir-id="${escaparHtml(registro.id)}">Abrir Lista</button>
+              <button type="button" class="btn-remover btn-excluir-historico" data-excluir-id="${escaparHtml(registro.id)}">Excluir</button>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
 
-  const resumoQtd = montarResumoTotais(listaAtual);
-  el.resumoLista.textContent = `${listaAtual.length} item(ns) • Total saída: ${resumoQtd}`;
+    els.listaHistorico.querySelectorAll(".btn-abrir-historico").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-abrir-id");
+        abrirListaDoHistorico(id);
+      });
+    });
 
-  el.tabelaSaidasBody.innerHTML = listaAtual
-    .map((it, idx) => {
-      const un = normalizarUnidade(it.unidade);
-      return `
-      <tr>
-        <td><strong>${escapeHtml(it.codigo)}</strong></td>
-        <td>${escapeHtml(it.descricao)}</td>
-        <td><strong>${escapeHtml(`${formatarNumero(it.quantidade)} ${un}`)}</strong></td>
-        <td>${escapeHtml(it.formaSaida)}</td>
-        <td>${escapeHtml(it.observacao || "—")}</td>
-        <td class="no-print">
-          <button type="button" class="btn btn-danger btn-sm" onclick="removerItemLista(${idx})">
-            Remover
-          </button>
-        </td>
-      </tr>`;
-    })
-    .join("");
-}
-
-window.removerItemLista = function (index) {
-  listaAtual.splice(index, 1);
-  salvarEstadoLocal();
-  renderListaAtual();
-};
-
-function exportarExcel() {
-  if (listaAtual.length === 0) {
-    setFeedback("Adicione pelo menos um item antes de exportar.", "err");
-    return;
+    els.listaHistorico.querySelectorAll(".btn-excluir-historico").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-excluir-id");
+        excluirListaDoHistorico(id);
+      });
+    });
   }
 
-  const listaId = el.opNumero.value.trim() || "SEM-NUMERO";
-  const responsavel = el.opResponsavel.value.trim() || "Não informado";
-  const destino = el.opDestino.value.trim() || "Não informado";
-  const dataHora = new Date().toLocaleString("pt-BR");
-  const totais = calcularTotaisPorUnidade(listaAtual);
+  function abrirListaDoHistorico(id) {
+    const encontrada = historicoListas.find((h) => h.id === id);
+    if (!encontrada) return;
 
-  const bordaFina = {
-    top: { style: "thin", color: { rgb: "CBD5E1" } },
-    bottom: { style: "thin", color: { rgb: "CBD5E1" } },
-    left: { style: "thin", color: { rgb: "CBD5E1" } },
-    right: { style: "thin", color: { rgb: "CBD5E1" } },
-  };
+    if (listaAtual.length > 0) {
+      const confirmar = window.confirm("Substituir a lista atual pelos itens da lista salva selecionada?");
+      if (!confirmar) return;
+    }
 
-  const estiloTitulo = {
-    font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "FFFFFF" } },
-    fill: { fgColor: { rgb: "1E3A8A" } },
-    alignment: { horizontal: "left", vertical: "center" },
-  };
+    listaAtual = (encontrada.itens || []).map((item) => ({
+      ...item,
+      id: item.id || gerarId(),
+      unidade: normalizarUnidade(item.unidade)
+    }));
 
-  const estiloSubtitulo = {
-    font: { name: "Calibri", sz: 10, italic: true, color: { rgb: "DBEAFE" } },
-    fill: { fgColor: { rgb: "1E3A8A" } },
-    alignment: { horizontal: "left", vertical: "center" },
-  };
+    els.inputNumeroLista.value = encontrada.numero || "";
+    els.inputResponsavel.value = encontrada.responsavel || "";
+    els.inputDestino.value = encontrada.destino || "";
 
-  const estiloMetaLabel = {
-    font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "334155" } },
-    fill: { fgColor: { rgb: "F1F5F9" } },
-    border: bordaFina,
-    alignment: { horizontal: "left", vertical: "center" },
-  };
-
-  const estiloMetaValor = {
-    font: { name: "Calibri", sz: 10, color: { rgb: "0F172A" } },
-    fill: { fgColor: { rgb: "FFFFFF" } },
-    border: bordaFina,
-    alignment: { horizontal: "left", vertical: "center" },
-  };
-
-  const estiloHeaderTabela = {
-    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
-    fill: { fgColor: { rgb: "1D4ED8" } },
-    border: bordaFina,
-    alignment: { horizontal: "center", vertical: "center" },
-  };
-
-  const estiloHeaderTabelaEsq = {
-    ...estiloHeaderTabela,
-    alignment: { horizontal: "left", vertical: "center" },
-  };
-
-  const estiloTotalLabel = {
-    font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "1E3A8A" } },
-    fill: { fgColor: { rgb: "EFF6FF" } },
-    border: bordaFina,
-    alignment: { horizontal: "right", vertical: "center" },
-  };
-
-  const estiloTotalValor = {
-    font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "0F172A" } },
-    fill: { fgColor: { rgb: "EFF6FF" } },
-    border: bordaFina,
-    alignment: { horizontal: "center", vertical: "center" },
-  };
-
-  const ws = {};
-  const setCell = (r, c, value, style, numFmt) => {
-    const addr = XLSX.utils.encode_cell({ r, c });
-    const cell = { v: value, t: typeof value === "number" ? "n" : "s", s: style };
-    if (numFmt) cell.z = numFmt;
-    ws[addr] = cell;
-  };
-
-  // Linha 0 e 1: Banner Superior (colunas A..G)
-  for (let c = 0; c < 7; c++) {
-    setCell(0, c, c === 0 ? "LISTACOD — RELATÓRIO DE SAÍDA DE MATERIAIS" : "", estiloTitulo);
-    setCell(1, c, c === 0 ? `Gerado em ${dataHora}` : "", estiloSubtitulo);
+    salvarEstadoAtual();
+    renderizarListaAtual();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Linha 3 e 4: Metadados da Operação
-  setCell(3, 0, "Lista:", estiloMetaLabel);
-  setCell(3, 1, listaId, estiloMetaValor);
-  setCell(3, 2, "", estiloMetaValor);
-  setCell(3, 3, "Data / Hora:", estiloMetaLabel);
-  setCell(3, 4, dataHora, estiloMetaValor);
-  setCell(3, 5, "", estiloMetaValor);
-  setCell(3, 6, "", estiloMetaValor);
+  function excluirListaDoHistorico(id) {
+    historicoListas = historicoListas.filter((h) => h.id !== id);
+    salvarHistoricoStorage();
+    renderizarHistorico();
+  }
 
-  setCell(4, 0, "Responsável:", estiloMetaLabel);
-  setCell(4, 1, responsavel, estiloMetaValor);
-  setCell(4, 2, "", estiloMetaValor);
-  setCell(4, 3, "Destino / Obs.:", estiloMetaLabel);
-  setCell(4, 4, destino, estiloMetaValor);
-  setCell(4, 5, "", estiloMetaValor);
-  setCell(4, 6, "", estiloMetaValor);
+  function adicionarItemNaLista(evento) {
+    evento.preventDefault();
 
-  // Linha 6: Cabeçalho da Tabela
-  const headers = [
-    { text: "#", style: estiloHeaderTabela },
-    { text: "COD", style: estiloHeaderTabela },
-    { text: "Descrição do Item", style: estiloHeaderTabelaEsq },
-    { text: "Quantidade", style: estiloHeaderTabela },
-    { text: "Unidade", style: estiloHeaderTabela },
-    { text: "Forma de Saída", style: estiloHeaderTabela },
-    { text: "Observação", style: estiloHeaderTabelaEsq },
-  ];
-  headers.forEach((h, idx) => setCell(6, idx, h.text, h.style));
+    const termoCod = els.inputCod.value.trim();
+    const produto = buscarProdutoPorEntrada(termoCod);
 
-  // Linhas de Itens (a partir da linha 7)
-  let maxDescLen = 28;
-  let maxObsLen = 18;
+    if (!produto) {
+      alert("Selecione ou digite um COD válido existente na base de produtos.");
+      els.inputCod.focus();
+      return;
+    }
 
-  listaAtual.forEach((it, idx) => {
-    const r = 7 + idx;
-    const zebra = idx % 2 === 1 ? "F8FAFC" : "FFFFFF";
-    const un = normalizarUnidade(it.unidade);
-    const desc = String(it.descricao || "");
-    const obs = String(it.observacao || "—");
+    const qtd = Number(els.inputQtd.value);
+    if (!Number.isFinite(qtd) || qtd <= 0) {
+      alert("Informe uma quantidade válida maior que zero.");
+      els.inputQtd.focus();
+      return;
+    }
 
-    if (desc.length > maxDescLen) maxDescLen = Math.min(desc.length + 4, 58);
-    if (obs.length > maxObsLen) maxObsLen = Math.min(obs.length + 4, 36);
+    const unidade = normalizarUnidade(els.selectUnidade.value);
+    const motivo = els.selectMotivo.value;
+    const obs = els.inputObsItem.value.trim();
 
-    const baseCell = {
-      font: { name: "Calibri", sz: 10, color: { rgb: "1E293B" } },
-      fill: { fgColor: { rgb: zebra } },
-      border: bordaFina,
-      alignment: { vertical: "center" },
+    listaAtual.push({
+      id: gerarId(),
+      codigo: produto.codigo,
+      descricao: produto.descricao,
+      quantidade: qtd,
+      unidade,
+      motivo,
+      obs
+    });
+
+    salvarEstadoAtual();
+    renderizarListaAtual();
+
+    els.inputCod.value = "";
+    els.inputQtd.value = "1";
+    els.inputObsItem.value = "";
+    atualizarPreviewProduto();
+    els.inputCod.focus();
+  }
+
+  function salvarListaNoHistorico() {
+    if (listaAtual.length === 0) {
+      alert("Adicione pelo menos um item à lista antes de salvar.");
+      return;
+    }
+
+    const numeroInformado = els.inputNumeroLista.value.trim();
+    const numeroFinal = numeroInformado || `Saída ${formatarDataHora()}`;
+
+    const registro = {
+      id: gerarId(),
+      numero: numeroFinal,
+      responsavel: els.inputResponsavel.value.trim(),
+      destino: els.inputDestino.value.trim(),
+      dataHora: formatarDataHora(),
+      itens: listaAtual.map((item) => ({
+        ...item,
+        unidade: normalizarUnidade(item.unidade)
+      }))
     };
 
-    setCell(r, 0, idx + 1, { ...baseCell, alignment: { horizontal: "center", vertical: "center" } });
-    setCell(r, 1, String(it.codigo), {
-      ...baseCell,
-      font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "0F172A" } },
+    historicoListas.unshift(registro);
+    if (historicoListas.length > MAX_HISTORICO) {
+      historicoListas = historicoListas.slice(0, MAX_HISTORICO);
+    }
+
+    salvarHistoricoStorage();
+    renderizarHistorico();
+    alert(`Lista "${numeroFinal}" salva com sucesso no histórico!`);
+  }
+
+  function exportarExcel() {
+    if (listaAtual.length === 0) {
+      alert("Não há itens na lista para exportar.");
+      return;
+    }
+
+    if (typeof XLSX === "undefined") {
+      alert("Biblioteca de exportação Excel não carregada. Verifique sua conexão com a internet e recarregue a página.");
+      return;
+    }
+
+    const numeroLista = els.inputNumeroLista.value.trim();
+    const responsavel = els.inputResponsavel.value.trim();
+    const destino = els.inputDestino.value.trim();
+    const dataHoje = formatarDataCurta();
+
+    const bordaFina = {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    };
+
+    const estiloTitulo = {
+      font: { name: "Calibri", sz: 18, bold: true, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const estiloInfoCabecalho = {
+      font: { name: "Aptos", sz: 18, bold: true, color: { rgb: "000000" } },
+      alignment: { horizontal: "left", vertical: "center" }
+    };
+
+    const estiloHeaderTabela = {
+      font: { name: "Aptos", sz: 16, bold: true, color: { rgb: "000000" } },
       alignment: { horizontal: "center", vertical: "center" },
-    });
-    setCell(r, 2, desc, {
-      ...baseCell,
+      border: bordaFina
+    };
+
+    const estiloCod = {
+      font: { name: "Aptos", sz: 16, bold: true, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: bordaFina
+    };
+
+    const estiloDescricao = {
+      font: { name: "Aptos", sz: 12, bold: false, color: { rgb: "000000" } },
       alignment: { horizontal: "left", vertical: "center", wrapText: true },
-    });
-    setCell(
-      r,
-      3,
-      Number(it.quantidade),
-      {
-        ...baseCell,
-        font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "0F172A" } },
-        alignment: { horizontal: "right", vertical: "center" },
-      },
-      "#,##0.###"
-    );
-    setCell(r, 4, un, {
-      ...baseCell,
-      font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "1D4ED8" } },
+      border: bordaFina
+    };
+
+    const estiloQtd = {
+      font: { name: "Aptos", sz: 16, bold: true, color: { rgb: "000000" } },
       alignment: { horizontal: "center", vertical: "center" },
+      border: bordaFina
+    };
+
+    const estiloTipo = {
+      font: { name: "Aptos", sz: 12, bold: false, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center", wrapText: true },
+      border: bordaFina
+    };
+
+    const estiloConfirmacao = {
+      font: { name: "Aptos", sz: 11, bold: false, color: { rgb: "000000" } },
+      alignment: { horizontal: "left", vertical: "center" }
+    };
+
+    const estiloAssinatura = {
+      font: { name: "Aptos", sz: 11, bold: false, color: { rgb: "000000" } },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const ws = {};
+    const merges = [
+      { s: { r: 6, c: 0 }, e: { r: 6, c: 3 } } // A7:D7 -> CAUTELA DE SAIDA
+    ];
+
+    const rowHeights = [];
+    for (let r = 0; r < 6; r++) {
+      rowHeights[r] = { hpt: 18 };
+    }
+
+    // Linha 7 (index 6): Título CAUTELA DE SAIDA
+    const tituloCautela = numeroLista ? `CAUTELA DE SAIDA - ${numeroLista.toUpperCase()}` : "CAUTELA DE SAIDA";
+    ws["A7"] = { v: tituloCautela, t: "s", s: estiloTitulo };
+    ws["B7"] = { v: "", t: "s", s: estiloTitulo };
+    ws["C7"] = { v: "", t: "s", s: estiloTitulo };
+    ws["D7"] = { v: "", t: "s", s: estiloTitulo };
+    rowHeights[6] = { hpt: 23.25 };
+
+    // Linha 8 (index 7): Espaço
+    rowHeights[7] = { hpt: 24 };
+
+    // Linha 9 (index 8): DATA DE SEPARAÇÃO
+    const textoData = `DATA DE SEPARAÇÃO    ${dataHoje}`;
+    ws["B9"] = { v: textoData, t: "s", s: estiloInfoCabecalho };
+    rowHeights[8] = { hpt: 24 };
+
+    // Linha 10 (index 9): RESPONSÁVEL DA SEPARAÇÃO
+    const textoResp = responsavel
+      ? `RESPONSÁVEL DA SEPARAÇÃO   ${responsavel.toUpperCase()}`
+      : "RESPONSÁVEL DA SEPARAÇÃO   __________________ ";
+    ws["B10"] = { v: textoResp, t: "s", s: estiloInfoCabecalho };
+    rowHeights[9] = { hpt: 24 };
+
+    // Linha 11 (index 10): Destino / Obs geral (se preenchido) ou linha em branco
+    if (destino) {
+      ws["B11"] = { v: `DESTINO / OBS:   ${destino.toUpperCase()}`, t: "s", s: estiloInfoCabecalho };
+    }
+    rowHeights[10] = { hpt: 24 };
+
+    // Linha 12 (index 11): Espaço
+    rowHeights[11] = { hpt: 18 };
+
+    // Linha 13 (index 12): Cabeçalho da tabela (Cód | DESCRICÃO | QTD | TIPO)
+    ws["B13"] = { v: "Cód", t: "s", s: estiloHeaderTabela };
+    ws["C13"] = { v: "DESCRICÃO ", t: "s", s: estiloHeaderTabela };
+    ws["D13"] = { v: "QTD", t: "s", s: estiloHeaderTabela };
+    ws["E13"] = { v: "TIPO", t: "s", s: estiloHeaderTabela };
+    rowHeights[12] = { hpt: 21 };
+
+    // Linhas de itens a partir da linha 14 (index 13)
+    let linhaAtual = 14;
+    listaAtual.forEach((item) => {
+      const codNum = Number(item.codigo);
+      const isCodNumerico = Number.isFinite(codNum) && String(codNum) === String(item.codigo).trim();
+
+      ws[`B${linhaAtual}`] = {
+        v: isCodNumerico ? codNum : String(item.codigo),
+        t: isCodNumerico ? "n" : "s",
+        s: estiloCod
+      };
+      ws[`C${linhaAtual}`] = {
+        v: String(item.descricao).toUpperCase(),
+        t: "s",
+        s: estiloDescricao
+      };
+      ws[`D${linhaAtual}`] = {
+        v: formatarQtdComUnidade(item.quantidade, item.unidade),
+        t: "s",
+        s: estiloQtd
+      };
+
+      const infoTipo = [item.motivo, item.obs].filter(Boolean).join(" - ");
+      ws[`E${linhaAtual}`] = {
+        v: infoTipo,
+        t: "s",
+        s: estiloTipo
+      };
+
+      rowHeights[linhaAtual - 1] = { hpt: 21 };
+      linhaAtual += 1;
     });
-    setCell(r, 5, String(it.formaSaida || ""), {
-      ...baseCell,
-      alignment: { horizontal: "center", vertical: "center" },
+
+    // Duas linhas em branco após os itens
+    rowHeights[linhaAtual - 1] = { hpt: 21 };
+    linhaAtual += 1;
+    rowHeights[linhaAtual - 1] = { hpt: 21 };
+    linhaAtual += 1;
+
+    // Texto de confirmação
+    ws[`B${linhaAtual}`] = {
+      v: "E_______________________ Confirmo a (s) saida (s) da (s) mercadoria (s) acima descrita (s)",
+      t: "s",
+      s: estiloConfirmacao
+    };
+    rowHeights[linhaAtual - 1] = { hpt: 21 };
+    linhaAtual += 1;
+
+    // Linha em branco antes da assinatura
+    rowHeights[linhaAtual - 1] = { hpt: 21 };
+    linhaAtual += 1;
+
+    // Linha de assinatura (B:C mesclado)
+    ws[`B${linhaAtual}`] = {
+      v: "___________________________________________________________________________",
+      t: "s",
+      s: estiloAssinatura
+    };
+    ws[`C${linhaAtual}`] = { v: "", t: "s", s: estiloAssinatura };
+    merges.push({ s: { r: linhaAtual - 1, c: 1 }, e: { r: linhaAtual - 1, c: 2 } });
+    rowHeights[linhaAtual - 1] = { hpt: 21 };
+    linhaAtual += 1;
+
+    // Rótulo RESPONSÁVEL (B:C mesclado)
+    ws[`B${linhaAtual}`] = {
+      v: "RESPONSÁVEL",
+      t: "s",
+      s: estiloAssinatura
+    };
+    ws[`C${linhaAtual}`] = { v: "", t: "s", s: estiloAssinatura };
+    merges.push({ s: { r: linhaAtual - 1, c: 1 }, e: { r: linhaAtual - 1, c: 2 } });
+    rowHeights[linhaAtual - 1] = { hpt: 21 };
+
+    ws["!ref"] = `A1:E${linhaAtual}`;
+    ws["!merges"] = merges;
+    ws["!rows"] = rowHeights;
+    ws["!cols"] = [
+      { wch: 3.5 },  // A (margem esquerda)
+      { wch: 14 },   // B (Cód)
+      { wch: 56 },   // C (DESCRICÃO)
+      { wch: 15 },   // D (QTD)
+      { wch: 30 }    // E (TIPO)
+    ];
+
+    // Oculta linhas de grade e configura página para impressão limpa
+    ws["!views"] = [{ showGridLines: false }];
+    ws["!pageSetup"] = {
+      orientation: "portrait",
+      paperSize: 9,
+      fitToWidth: 1,
+      fitToHeight: 0
+    };
+    ws["!pageMargins"] = {
+      left: 0.25,
+      right: 0.25,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.3,
+      footer: 0.3
+    };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Cautela de Saida");
+
+    const nomeArquivoBase = (numeroLista || `cautela_saida_${new Date().toISOString().slice(0, 10)}`)
+      .replace(/[^a-zA-Z0-9_-]+/g, "_");
+    XLSX.writeFile(wb, `${nomeArquivoBase}.xlsx`);
+  }
+
+  function limparCamposFormulario() {
+    els.inputCod.value = "";
+    els.inputQtd.value = "1";
+    els.selectUnidade.value = "cx";
+    els.selectMotivo.selectedIndex = 0;
+    els.inputObsItem.value = "";
+    atualizarPreviewProduto();
+    els.inputCod.focus();
+  }
+
+  function iniciarNovaLista() {
+    if (listaAtual.length > 0) {
+      const confirmar = window.confirm("Deseja limpar todos os itens da lista atual para iniciar uma nova?");
+      if (!confirmar) return;
+    }
+
+    listaAtual = [];
+    els.inputNumeroLista.value = "";
+    els.inputResponsavel.value = "";
+    els.inputDestino.value = "";
+    salvarEstadoAtual();
+    renderizarListaAtual();
+    els.inputCod.focus();
+  }
+
+  function limparHistoricoCompleto() {
+    if (historicoListas.length === 0) return;
+    const confirmar = window.confirm("Tem certeza que deseja apagar todo o histórico de listas salvas?");
+    if (!confirmar) return;
+
+    historicoListas = [];
+    salvarHistoricoStorage();
+    renderizarHistorico();
+  }
+
+  function registrarEventos() {
+    els.inputCod.addEventListener("input", atualizarPreviewProduto);
+    els.inputCod.addEventListener("change", atualizarPreviewProduto);
+
+    els.formSaida.addEventListener("submit", adicionarItemNaLista);
+    els.btnLimparCampos.addEventListener("click", limparCamposFormulario);
+
+    els.tbodyItens.addEventListener("click", (evento) => {
+      const alvo = evento.target;
+      if (!(alvo instanceof HTMLElement)) return;
+
+      const idRemover = alvo.getAttribute("data-remover-id");
+      if (idRemover) {
+        listaAtual = listaAtual.filter((item) => item.id !== idRemover);
+        salvarEstadoAtual();
+        renderizarListaAtual();
+      }
     });
-    setCell(r, 6, obs, {
-      ...baseCell,
-      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+
+    [els.inputNumeroLista, els.inputResponsavel, els.inputDestino].forEach((campo) => {
+      campo.addEventListener("input", renderizarListaAtual);
     });
-  });
 
-  // Bloco de Resumo / Totais ao final
-  const rResumo = 7 + listaAtual.length + 1;
-  const linhasResumo = [
-    ["Total de Itens Registrados:", listaAtual.length, "item(ns)"],
-    ["Total em Caixas (cx):", totais.cx, "cx"],
-    ["Total em Unidades (un):", totais.un, "un"],
-    ["Total em Quilos (kg):", totais.kg, "kg"],
-  ];
-
-  linhasResumo.forEach(([rotulo, valor, sufixo], i) => {
-    const r = rResumo + i;
-    setCell(r, 0, "", estiloTotalLabel);
-    setCell(r, 1, "", estiloTotalLabel);
-    setCell(r, 2, rotulo, estiloTotalLabel);
-    setCell(r, 3, Number(valor), { ...estiloTotalValor, alignment: { horizontal: "right", vertical: "center" } }, "#,##0.###");
-    setCell(r, 4, sufixo, estiloTotalValor);
-  });
-
-  const ultimaLinha = rResumo + linhasResumo.length - 1;
-  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: ultimaLinha, c: 6 } });
-
-  // Mesclagens de células
-  ws["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
-    { s: { r: 3, c: 1 }, e: { r: 3, c: 2 } },
-    { s: { r: 3, c: 4 }, e: { r: 3, c: 6 } },
-    { s: { r: 4, c: 1 }, e: { r: 4, c: 2 } },
-    { s: { r: 4, c: 4 }, e: { r: 4, c: 6 } },
-    ...linhasResumo.map((_, i) => ({
-      s: { r: rResumo + i, c: 0 },
-      e: { r: rResumo + i, c: 2 },
-    })),
-  ];
-
-  // Largura das colunas e altura das linhas
-  ws["!cols"] = [
-    { wch: 6 },
-    { wch: 14 },
-    { wch: maxDescLen },
-    { wch: 14 },
-    { wch: 11 },
-    { wch: 20 },
-    { wch: maxObsLen },
-  ];
-
-  ws["!rows"] = [
-    { hpt: 26 },
-    { hpt: 18 },
-    { hpt: 8 },
-    { hpt: 20 },
-    { hpt: 20 },
-    { hpt: 10 },
-    { hpt: 24 },
-    ...listaAtual.map(() => ({ hpt: 21 })),
-    { hpt: 10 },
-    ...linhasResumo.map(() => ({ hpt: 20 })),
-  ];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Saidas");
-
-  const nomeSeguro = (el.opNumero.value.trim() || "lista_saidas").replace(/[\\/:*?"<>|]/g, "-");
-  XLSX.writeFile(wb, `${nomeSeguro}.xlsx`);
-  setFeedback(`Planilha "${nomeSeguro}.xlsx" exportada com sucesso.`, "ok");
-}
-
-function salvarNoHistorico() {
-  if (listaAtual.length === 0) {
-    setFeedback("Não há itens na lista para salvar.", "err");
-    return;
+    els.btnSalvarLista.addEventListener("click", salvarListaNoHistorico);
+    els.btnExportarExcel.addEventListener("click", exportarExcel);
+    els.btnImprimir.addEventListener("click", () => window.print());
+    els.btnNovaLista.addEventListener("click", iniciarNovaLista);
+    els.btnLimparHistorico.addEventListener("click", limparHistoricoCompleto);
   }
 
-  const hist = JSON.parse(localStorage.getItem(STORAGE_HISTORICO_KEY) || "[]");
-  hist.unshift({
-    id: Date.now(),
-    numero: el.opNumero.value.trim() || `LISTA-${hist.length + 1}`,
-    responsavel: el.opResponsavel.value.trim() || "—",
-    destino: el.opDestino.value.trim() || "—",
-    dataHora: new Date().toLocaleString("pt-BR"),
-    itens: structuredClone(listaAtual),
-  });
-
-  localStorage.setItem(STORAGE_HISTORICO_KEY, JSON.stringify(hist.slice(0, 50)));
-  renderHistorico();
-  setFeedback("Lista salva no histórico.", "ok");
-}
-
-function carregarListaHistoricoPorIndice(index) {
-  const hist = JSON.parse(localStorage.getItem(STORAGE_HISTORICO_KEY) || "[]");
-  const encontrada = hist[index];
-  if (!encontrada) {
-    setFeedback("Não foi possível localizar a lista salva.", "err");
-    return;
+  function init() {
+    carregarBaseEmbutida();
+    carregarEstadoStorage();
+    registrarEventos();
+    atualizarPreviewProduto();
+    renderizarListaAtual();
+    renderizarHistorico();
   }
 
-  const itensCopia = JSON.parse(JSON.stringify(encontrada.itens || [])).map((it) => ({
-    codigo: normalizarCodigo(it.codigo),
-    descricao: String(it.descricao || ""),
-    quantidade: Number(it.quantidade || 0),
-    unidade: normalizarUnidade(it.unidade),
-    formaSaida: String(it.formaSaida || "Outro"),
-    observacao: String(it.observacao || ""),
-  }));
-
-  listaAtual = itensCopia;
-  if (el.opNumero) el.opNumero.value = encontrada.numero || "";
-  if (el.opResponsavel) el.opResponsavel.value = encontrada.responsavel === "—" ? "" : (encontrada.responsavel || "");
-  if (el.opDestino) el.opDestino.value = encontrada.destino === "—" ? "" : (encontrada.destino || "");
-
-  salvarEstadoLocal();
-  renderListaAtual();
-  setFeedback(`Lista "${encontrada.numero}" carregada na tabela.`, "ok");
-  el.tabelaSaidasBody?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
-
-function renderHistorico() {
-  const hist = JSON.parse(localStorage.getItem(STORAGE_HISTORICO_KEY) || "[]");
-  if (!Array.isArray(hist) || hist.length === 0) {
-    el.historicoContainer.innerHTML = `<p class="muted">Nenhuma lista salva até o momento.</p>`;
-    return;
-  }
-
-  el.historicoContainer.innerHTML = hist
-    .map(
-      (h, idx) => `
-      <div class="historico-item">
-        <div>
-          <strong>${escapeHtml(h.numero || `LISTA-${idx + 1}`)}</strong> • ${escapeHtml(h.dataHora || "")}
-          <div class="muted">
-            Responsável: ${escapeHtml(h.responsavel || "—")} • Destino: ${escapeHtml(h.destino || "—")} • ${(h.itens || []).length} item(ns) (${escapeHtml(montarResumoTotais(h.itens || []))})
-          </div>
-        </div>
-        <button type="button" class="btn btn-outline btn-sm btn-abrir-lista" data-idx="${idx}">
-          Abrir Lista
-        </button>
-      </div>`
-    )
-    .join("");
-
-  el.historicoContainer.querySelectorAll(".btn-abrir-lista").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      carregarListaHistoricoPorIndice(Number(btn.dataset.idx));
-    });
-  });
-}
-
-el.codInput.addEventListener("input", (e) => {
-  buscarPorCodigoOuTexto(e.target.value);
-});
-
-el.btnLimparBusca.addEventListener("click", () => {
-  el.codInput.value = "";
-  itemSelecionado = null;
-  el.itemPreview.classList.add("hidden");
-  setFeedback("");
-  el.codInput.focus();
-});
-
-el.formSaida.addEventListener("submit", (e) => {
-  e.preventDefault();
-
-  if (!itemSelecionado) {
-    setFeedback("Informe um COD válido antes de adicionar.", "err");
-    el.codInput.focus();
-    return;
-  }
-
-  const qtd = Number(el.qtdSaida.value);
-  if (!qtd || qtd <= 0) {
-    setFeedback("Informe uma quantidade maior que zero.", "err");
-    el.qtdSaida.focus();
-    return;
-  }
-
-  listaAtual.push({
-    codigo: itemSelecionado.codigo,
-    descricao: itemSelecionado.descricao,
-    quantidade: qtd,
-    unidade: normalizarUnidade(el.unidadeSaida.value),
-    formaSaida: el.formaSaida.value,
-    observacao: el.obsItem.value.trim(),
-  });
-
-  salvarEstadoLocal();
-  renderListaAtual();
-
-  el.codInput.value = "";
-  el.qtdSaida.value = "";
-  el.obsItem.value = "";
-  itemSelecionado = null;
-  el.itemPreview.classList.add("hidden");
-  setFeedback("Item adicionado.", "ok");
-  el.codInput.focus();
-});
-
-el.btnSalvarLista.addEventListener("click", salvarNoHistorico);
-el.btnExportXlsx.addEventListener("click", exportarExcel);
-el.btnImprimir.addEventListener("click", () => window.print());
-
-el.btnLimparLista.addEventListener("click", () => {
-  if (listaAtual.length === 0) return;
-  listaAtual = [];
-  salvarEstadoLocal();
-  renderListaAtual();
-  setFeedback("Lista limpa.", "ok");
-});
-
-carregarEstadoLocal();
+  init();
+})();

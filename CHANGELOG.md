@@ -1,20 +1,16 @@
+# Changelog
 
-Changelog
 Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
-[Unreleased]
-Adicionado
-README.md com visão geral, funcionalidades, estrutura de pastas e instruções de uso.
+## [Unreleased]
 
-DOCUMENTACAO.md com detalhes da arquitetura, fluxo de dados, chaves de localStorage, regras de unidades/exportação e notas de segurança.
+### Alterado
+* Layout de exportação Excel (`.xlsx`) atualizado para o formato oficial **CAUTELA DE SAIDA**, sem linhas de grade, com cabeçalho de separação (`DATA DE SEPARAÇÃO`, `RESPONSÁVEL DA SEPARAÇÃO`), tabela bordada (`Cód`, `DESCRICÃO`, `QTD` com unidade e `TIPO`) e bloco de confirmação com assinatura do responsável no rodapé.
 
-CHANGELOG.md para registro histórico das alterações do projeto.
+### Adicionado
+* Seletor de **Unidade** (`cx`, `un`, `kg`) no formulário, na tabela, no resumo de totais, no histórico e na planilha exportada.
+* Base embarcada em `js/base.js` com 7.349 produtos.
+* `README.md`, `DOCUMENTACAO.md` e `CHANGELOG.md`.
 
-Alterado
-Removido o indicador de status de base fixa do cabeçalho em index.html, css/styles.css e js/app.js.
-
-Adicionado seletor de Unidade (cx, un, kg) ao registro de saídas, exibindo a unidade na tabela, no resumo de totais por unidade, no histórico e na coluna Unidade da exportação .xlsx.
-
-Corrigido o seletor universal no css/styles.css para * { box-sizing: border-box; }.
-
-Configurado o projeto para publicação estática via GitHub Pages na branch main.
+### Corrigido
+* Botão **Abrir Lista** no histórico alterado para vincular `addEventListener` diretamente aos elementos renderizados.
