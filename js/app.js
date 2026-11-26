@@ -469,46 +469,63 @@ function salvarNoHistorico() {
   setFeedback("Lista salva no histórico.", "ok");
 }
 
-window.carregarListaHistorico = function (id) {
+function carregarListaHistoricoPorIndice(index) {
   const hist = JSON.parse(localStorage.getItem(STORAGE_HISTORICO_KEY) || "[]");
-  const encontrada = hist.find((h) => h.id === id);
-  if (!encontrada) return;
+  const encontrada = hist[index];
+  if (!encontrada) {
+    setFeedback("Não foi possível localizar a lista salva.", "err");
+    return;
+  }
 
-  listaAtual = structuredClone(encontrada.itens || []).map((it) => ({
-    ...it,
+  const itensCopia = JSON.parse(JSON.stringify(encontrada.itens || [])).map((it) => ({
+    codigo: normalizarCodigo(it.codigo),
+    descricao: String(it.descricao || ""),
+    quantidade: Number(it.quantidade || 0),
     unidade: normalizarUnidade(it.unidade),
+    formaSaida: String(it.formaSaida || "Outro"),
+    observacao: String(it.observacao || ""),
   }));
-  el.opNumero.value = encontrada.numero || "";
-  el.opResponsavel.value = encontrada.responsavel === "—" ? "" : encontrada.responsavel;
-  el.opDestino.value = encontrada.destino === "—" ? "" : encontrada.destino;
+
+  listaAtual = itensCopia;
+  if (el.opNumero) el.opNumero.value = encontrada.numero || "";
+  if (el.opResponsavel) el.opResponsavel.value = encontrada.responsavel === "—" ? "" : (encontrada.responsavel || "");
+  if (el.opDestino) el.opDestino.value = encontrada.destino === "—" ? "" : (encontrada.destino || "");
+
   salvarEstadoLocal();
   renderListaAtual();
-  setFeedback(`Lista "${encontrada.numero}" carregada.`, "ok");
-};
+  setFeedback(`Lista "${encontrada.numero}" carregada na tabela.`, "ok");
+  el.tabelaSaidasBody?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
 
 function renderHistorico() {
   const hist = JSON.parse(localStorage.getItem(STORAGE_HISTORICO_KEY) || "[]");
-  if (hist.length === 0) {
+  if (!Array.isArray(hist) || hist.length === 0) {
     el.historicoContainer.innerHTML = `<p class="muted">Nenhuma lista salva até o momento.</p>`;
     return;
   }
 
   el.historicoContainer.innerHTML = hist
     .map(
-      (h) => `
+      (h, idx) => `
       <div class="historico-item">
         <div>
-          <strong>${escapeHtml(h.numero)}</strong> • ${escapeHtml(h.dataHora)}
+          <strong>${escapeHtml(h.numero || `LISTA-${idx + 1}`)}</strong> • ${escapeHtml(h.dataHora || "")}
           <div class="muted">
-            Responsável: ${escapeHtml(h.responsavel)} • Destino: ${escapeHtml(h.destino)} • ${h.itens.length} item(ns) (${escapeHtml(montarResumoTotais(h.itens || []))})
+            Responsável: ${escapeHtml(h.responsavel || "—")} • Destino: ${escapeHtml(h.destino || "—")} • ${(h.itens || []).length} item(ns) (${escapeHtml(montarResumoTotais(h.itens || []))})
           </div>
         </div>
-        <button type="button" class="btn btn-outline btn-sm" onclick="carregarListaHistorico(${h.id})">
+        <button type="button" class="btn btn-outline btn-sm btn-abrir-lista" data-idx="${idx}">
           Abrir Lista
         </button>
       </div>`
     )
     .join("");
+
+  el.historicoContainer.querySelectorAll(".btn-abrir-lista").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      carregarListaHistoricoPorIndice(Number(btn.dataset.idx));
+    });
+  });
 }
 
 el.codInput.addEventListener("input", (e) => {
