@@ -1,4 +1,3 @@
-const STORAGE_BASE_KEY = "listacod_base_simples_v1";
 const STORAGE_LISTA_ATUAL_KEY = "listacod_lista_atual_v1";
 const STORAGE_HISTORICO_KEY = "listacod_historico_v1";
 
@@ -8,7 +7,6 @@ let itemSelecionado = null;
 
 const el = {
   statusBase: document.getElementById("statusBase"),
-  inputBaseFile: document.getElementById("inputBaseFile"),
   codInput: document.getElementById("codInput"),
   sugestoesCod: document.getElementById("sugestoesCod"),
   btnLimparBusca: document.getElementById("btnLimparBusca"),
@@ -45,37 +43,18 @@ function salvarEstadoLocal() {
   localStorage.setItem(STORAGE_LISTA_ATUAL_KEY, JSON.stringify(listaAtual));
 }
 
-function carregarEstadoLocal() {
-  const baseSalva = localStorage.getItem(STORAGE_BASE_KEY);
-  if (baseSalva) {
-    try {
-      hidratarBase(JSON.parse(baseSalva));
-    } catch {
-      localStorage.removeItem(STORAGE_BASE_KEY);
-    }
-  }
-
-  const listaSalva = localStorage.getItem(STORAGE_LISTA_ATUAL_KEY);
-  if (listaSalva) {
-    try {
-      listaAtual = JSON.parse(listaSalva) || [];
-    } catch {
-      listaAtual = [];
-    }
-  }
-
-  renderListaAtual();
-  renderHistorico();
-}
-
-function hidratarBase(linhas) {
+function carregarBaseEmbutida() {
   baseProdutos.clear();
   const fragment = document.createDocumentFragment();
   let count = 0;
 
-  for (const row of linhas) {
-    const cod = normalizarCodigo(row["Código"] ?? row["codigo"] ?? row["COD"] ?? row["cod"]);
-    const descricao = String(row["Descrição"] ?? row["descricao"] ?? "").trim();
+  const fonte = typeof BASE_PRODUTOS_FIXA === "object" && BASE_PRODUTOS_FIXA !== null
+    ? BASE_PRODUTOS_FIXA
+    : {};
+
+  for (const [rawCod, rawDesc] of Object.entries(fonte)) {
+    const cod = normalizarCodigo(rawCod);
+    const descricao = String(rawDesc ?? "").trim();
     if (!cod || !descricao) continue;
 
     baseProdutos.set(cod, { codigo: cod, descricao });
@@ -91,27 +70,23 @@ function hidratarBase(linhas) {
 
   el.sugestoesCod.innerHTML = "";
   el.sugestoesCod.appendChild(fragment);
-
-  if (count > 0) {
-    el.statusBase.textContent = `Base carregada: ${count.toLocaleString("pt-BR")} itens`;
-    el.statusBase.className = "badge badge-ok";
-  } else {
-    el.statusBase.textContent = "Base vazia";
-    el.statusBase.className = "badge badge-neutral";
-  }
+  el.statusBase.textContent = `Base fixa: ${count.toLocaleString("pt-BR")} itens`;
 }
 
-async function importarArquivoBase(file) {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+function carregarEstadoLocal() {
+  carregarBaseEmbutida();
 
-  hidratarBase(json);
+  const listaSalva = localStorage.getItem(STORAGE_LISTA_ATUAL_KEY);
+  if (listaSalva) {
+    try {
+      listaAtual = JSON.parse(listaSalva) || [];
+    } catch {
+      listaAtual = [];
+    }
+  }
 
-  // Salva apenas COD e Descrição no localStorage (bem leve: ~400KB para 7.349 itens)
-  localStorage.setItem(STORAGE_BASE_KEY, JSON.stringify(Array.from(baseProdutos.values())));
-  setFeedback(`Planilha "${file.name}" carregada com ${baseProdutos.size} itens.`, "ok");
+  renderListaAtual();
+  renderHistorico();
 }
 
 function buscarPorCodigoOuTexto(termo) {
@@ -285,11 +260,6 @@ function renderHistorico() {
     )
     .join("");
 }
-
-el.inputBaseFile.addEventListener("change", (e) => {
-  const file = e.target.files?.[0];
-  if (file) importarArquivoBase(file);
-});
 
 el.codInput.addEventListener("input", (e) => {
   buscarPorCodigoOuTexto(e.target.value);

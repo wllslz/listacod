@@ -15,11 +15,7 @@
         <p class="subtitle">Consulta por COD e registro de itens que saíram</p>
       </div>
       <div class="base-status">
-        <span id="statusBase" class="badge badge-neutral">Base não carregada</span>
-        <label class="btn btn-outline btn-sm" for="inputBaseFile">
-          Importar Planilha (.xls / .xlsx / .csv)
-        </label>
-        <input type="file" id="inputBaseFile" accept=".xls,.xlsx,.csv" hidden />
+        <span id="statusBase" class="badge badge-ok">Carregando base...</span>
       </div>
     </div>
   </header>
@@ -157,6 +153,7 @@
     </div>
   </section>
 
+  <script src="js/base.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
