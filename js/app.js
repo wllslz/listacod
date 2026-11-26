@@ -11,28 +11,28 @@
   const UNIDADES_VALIDAS = ["cx", "un", "kg"];
 
   const els = {
-    statusBase: document.getElementById("statusBase"),
     formSaida: document.getElementById("formSaida"),
-    inputCod: document.getElementById("inputCod"),
+    codInput: document.getElementById("codInput"),
     sugestoesCod: document.getElementById("sugestoesCod"),
-    previewProduto: document.getElementById("previewProduto"),
-    inputQtd: document.getElementById("inputQtd"),
-    selectUnidade: document.getElementById("selectUnidade"),
-    selectMotivo: document.getElementById("selectMotivo"),
-    inputObsItem: document.getElementById("inputObsItem"),
-    btnLimparCampos: document.getElementById("btnLimparCampos"),
-    inputNumeroLista: document.getElementById("inputNumeroLista"),
-    inputResponsavel: document.getElementById("inputResponsavel"),
-    inputDestino: document.getElementById("inputDestino"),
-    resumoTotais: document.getElementById("resumoTotais"),
-    tbodyItens: document.getElementById("tbodyItens"),
-    infoImpressao: document.getElementById("infoImpressao"),
+    btnLimparBusca: document.getElementById("btnLimparBusca"),
+    feedbackMsg: document.getElementById("feedbackMsg"),
+    itemPreview: document.getElementById("itemPreview"),
+    prevCodigo: document.getElementById("prevCodigo"),
+    prevDescricao: document.getElementById("prevDescricao"),
+    qtdSaida: document.getElementById("qtdSaida"),
+    unidadeSaida: document.getElementById("unidadeSaida"),
+    formaSaida: document.getElementById("formaSaida"),
+    obsItem: document.getElementById("obsItem"),
+    opNumero: document.getElementById("opNumero"),
+    opResponsavel: document.getElementById("opResponsavel"),
+    opDestino: document.getElementById("opDestino"),
+    resumoLista: document.getElementById("resumoLista"),
+    tabelaSaidasBody: document.getElementById("tabelaSaidasBody"),
     btnSalvarLista: document.getElementById("btnSalvarLista"),
-    btnExportarExcel: document.getElementById("btnExportarExcel"),
+    btnExportXlsx: document.getElementById("btnExportXlsx"),
     btnImprimir: document.getElementById("btnImprimir"),
-    btnNovaLista: document.getElementById("btnNovaLista"),
-    btnLimparHistorico: document.getElementById("btnLimparHistorico"),
-    listaHistorico: document.getElementById("listaHistorico")
+    btnLimparLista: document.getElementById("btnLimparLista"),
+    historicoContainer: document.getElementById("historicoContainer")
   };
 
   /** @type {Array<{ codigo: string, codigoUpper: string, descricao: string, descricaoUpper: string }>} */
@@ -57,8 +57,9 @@
   }
 
   function formatarNumero(valor) {
-    return Number(valor).toLocaleString("pt-BR", {
-      minimumFractionDigits: Number.isInteger(Number(valor)) ? 0 : 2,
+    const num = Number(valor) || 0;
+    return num.toLocaleString("pt-BR", {
+      minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
       maximumFractionDigits: 3
     });
   }
@@ -96,6 +97,12 @@
       .replace(/'/g, "&#39;");
   }
 
+  function definirFeedback(texto = "", tipo = "") {
+    if (!els.feedbackMsg) return;
+    els.feedbackMsg.textContent = texto;
+    els.feedbackMsg.className = tipo ? `feedback ${tipo}` : "feedback";
+  }
+
   function carregarBaseEmbutida() {
     baseProdutos.clear();
     catalogoLista = [];
@@ -119,10 +126,10 @@
     }
 
     atualizarSugestoesDatalist("");
-    els.statusBase.textContent = `Base carregada: ${baseProdutos.size.toLocaleString("pt-BR")} produtos`;
   }
 
   function atualizarSugestoesDatalist(termoBruto = "") {
+    if (!els.sugestoesCod) return;
     const termoUpper = String(termoBruto ?? "").trim().toUpperCase();
     const matches = [];
 
@@ -186,22 +193,30 @@
   }
 
   function atualizarPreviewProduto() {
-    const termo = els.inputCod.value.trim();
+    const termo = (els.codInput?.value || "").trim();
     atualizarSugestoesDatalist(termo);
 
+    if (!els.itemPreview || !els.prevCodigo || !els.prevDescricao) return;
+
     if (!termo) {
-      els.previewProduto.className = "produto-preview vazio";
-      els.previewProduto.textContent = "Digite um COD para visualizar a descrição do produto.";
+      els.itemPreview.classList.add("hidden");
+      els.prevCodigo.textContent = "—";
+      els.prevDescricao.textContent = "—";
+      definFeedback("");
       return;
     }
 
     const produto = buscarProdutoPorEntrada(termo);
     if (produto) {
-      els.previewProduto.className = "produto-preview encontrado";
-      els.previewProduto.innerHTML = `<strong>COD ${escaparHtml(produto.codigo)}:</strong> ${escaparHtml(produto.descricao)}`;
+      els.itemPreview.classList.remove("hidden");
+      els.prevCodigo.textContent = `COD ${produto.codigo}`;
+      els.prevDescricao.textContent = produto.descricao;
+      definFeedback("Produto localizado na base.", "ok");
     } else {
-      els.previewProduto.className = "produto-preview nao-encontrado";
-      els.previewProduto.textContent = `COD "${termo}" não encontrado na base.`;
+      els.itemPreview.classList.add("hidden");
+      els.prevCodigo.textContent = "—";
+      els.prevDescricao.textContent = "—";
+      definFeedback(`COD "${termo}" não encontrado na base.`, "erro");
     }
   }
 
@@ -272,50 +287,49 @@
     const totalItens = listaAtual.length;
     const resumoUnidades = montarResumoTotais(listaAtual);
 
-    els.resumoTotais.textContent = `${totalItens} ${totalItens === 1 ? "item" : "itens"} | Total: ${resumoUnidades}`;
+    if (els.resumoLista) {
+      els.resumoLista.textContent = `${totalItens} ${totalItens === 1 ? "item" : "itens"} • Total saída: ${resumoUnidades}`;
+    }
 
-    const numeroLista = els.inputNumeroLista.value.trim() || "Sem identificação";
-    const responsavel = els.inputResponsavel.value.trim() || "Não informado";
-    const destino = els.inputDestino.value.trim() || "Não informado";
-    els.infoImpressao.textContent = `Lista: ${numeroLista} | Responsável: ${responsavel} | Destino/Obs: ${destino} | Emitido em: ${formatarDataHora()}`;
+    if (!els.tabelaSaidasBody) return;
 
     if (totalItens === 0) {
-      els.tbodyItens.innerHTML = `
-        <tr class="linha-vazia">
-          <td colspan="8">Nenhum item adicionado ainda. Use o formulário ao lado para lançar os códigos.</td>
+      els.tabelaSaidasBody.innerHTML = `
+        <tr class="empty-row">
+          <td colspan="6">Nenhum item adicionado. Informe um COD ao lado para começar.</td>
         </tr>
       `;
       return;
     }
 
-    els.tbodyItens.innerHTML = listaAtual
-      .map((item, index) => {
-        const unidade = normalizarUnidade(item.unidade);
+    els.tabelaSaidasBody.innerHTML = listaAtual
+      .map((item) => {
+        const qtdFormatada = formatarQtdComUnidade(item.quantidade, item.unidade);
         return `
-        <tr>
-          <td class="col-num">${index + 1}</td>
-          <td class="col-cod">${escaparHtml(item.codigo)}</td>
-          <td>${escaparHtml(item.descricao)}</td>
-          <td class="col-qtd">${formatarNumero(item.quantidade)}</td>
-          <td class="col-un"><span class="badge-un">${escaparHtml(unidade)}</span></td>
-          <td>${escaparHtml(item.motivo)}</td>
-          <td>${escaparHtml(item.obs || "—")}</td>
-          <td class="col-acao no-print">
-            <button type="button" class="btn-remover" data-remover-id="${escaparHtml(item.id)}" title="Remover item">Remover</button>
-          </td>
-        </tr>
-      `;
+          <tr>
+            <td class="col-cod">${escaparHtml(item.codigo)}</td>
+            <td>${escaparHtml(item.descricao)}</td>
+            <td class="col-qtd">${escaparHtml(qtdFormatada)}</td>
+            <td>${escaparHtml(item.motivo)}</td>
+            <td>${escaparHtml(item.obs || "—")}</td>
+            <td class="col-acao no-print">
+              <button type="button" class="btn-remover" data-remover-id="${escaparHtml(item.id)}" title="Remover item">Remover</button>
+            </td>
+          </tr>
+        `;
       })
       .join("");
   }
 
   function renderizarHistorico() {
+    if (!els.historicoContainer) return;
+
     if (historicoListas.length === 0) {
-      els.listaHistorico.innerHTML = `<p class="vazio-historico">Nenhuma lista salva no histórico.</p>`;
+      els.historicoContainer.innerHTML = `<p class="muted">Nenhuma lista salva até o momento.</p>`;
       return;
     }
 
-    els.listaHistorico.innerHTML = historicoListas
+    els.historicoContainer.innerHTML = historicoListas
       .map((registro) => {
         const qtdItens = Array.isArray(registro.itens) ? registro.itens.length : 0;
         const resumo = montarResumoTotais(registro.itens || []);
@@ -339,14 +353,14 @@
       })
       .join("");
 
-    els.listaHistorico.querySelectorAll(".btn-abrir-historico").forEach((btn) => {
+    els.historicoContainer.querySelectorAll(".btn-abrir-historico").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-abrir-id");
         abrirListaDoHistorico(id);
       });
     });
 
-    els.listaHistorico.querySelectorAll(".btn-excluir-historico").forEach((btn) => {
+    els.historicoContainer.querySelectorAll(".btn-excluir-historico").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-excluir-id");
         excluirListaDoHistorico(id);
@@ -369,9 +383,9 @@
       unidade: normalizarUnidade(item.unidade)
     }));
 
-    els.inputNumeroLista.value = encontrada.numero || "";
-    els.inputResponsavel.value = encontrada.responsavel || "";
-    els.inputDestino.value = encontrada.destino || "";
+    if (els.opNumero) els.opNumero.value = encontrada.numero || "";
+    if (els.opResponsavel) els.opResponsavel.value = encontrada.responsavel || "";
+    if (els.opDestino) els.opDestino.value = encontrada.destino || "";
 
     salvarEstadoAtual();
     renderizarListaAtual();
@@ -387,25 +401,25 @@
   function adicionarItemNaLista(evento) {
     evento.preventDefault();
 
-    const termoCod = els.inputCod.value.trim();
+    const termoCod = (els.codInput?.value || "").trim();
     const produto = buscarProdutoPorEntrada(termoCod);
 
     if (!produto) {
-      alert("Selecione ou digite um COD válido existente na base de produtos.");
-      els.inputCod.focus();
+      definFeedback("Selecione ou digite um COD válido existente na base de produtos.", "erro");
+      els.codInput?.focus();
       return;
     }
 
-    const qtd = Number(els.inputQtd.value);
+    const qtd = Number(els.qtdSaida?.value);
     if (!Number.isFinite(qtd) || qtd <= 0) {
-      alert("Informe uma quantidade válida maior que zero.");
-      els.inputQtd.focus();
+      definFeedback("Informe uma quantidade válida maior que zero.", "erro");
+      els.qtdSaida?.focus();
       return;
     }
 
-    const unidade = normalizarUnidade(els.selectUnidade.value);
-    const motivo = els.selectMotivo.value;
-    const obs = els.inputObsItem.value.trim();
+    const unidade = normalizarUnidade(els.unidadeSaida?.value);
+    const motivo = els.formaSaida?.value || "Venda";
+    const obs = (els.obsItem?.value || "").trim();
 
     listaAtual.push({
       id: gerarId(),
@@ -420,11 +434,12 @@
     salvarEstadoAtual();
     renderizarListaAtual();
 
-    els.inputCod.value = "";
-    els.inputQtd.value = "1";
-    els.inputObsItem.value = "";
+    if (els.codInput) els.codInput.value = "";
+    if (els.qtdSaida) els.qtdSaida.value = "";
+    if (els.obsItem) els.obsItem.value = "";
     atualizarPreviewProduto();
-    els.inputCod.focus();
+    definFeedback(`Item COD ${produto.codigo} adicionado à lista.`, "ok");
+    els.codInput?.focus();
   }
 
   function salvarListaNoHistorico() {
@@ -433,14 +448,14 @@
       return;
     }
 
-    const numeroInformado = els.inputNumeroLista.value.trim();
+    const numeroInformado = (els.opNumero?.value || "").trim();
     const numeroFinal = numeroInformado || `Saída ${formatarDataHora()}`;
 
     const registro = {
       id: gerarId(),
       numero: numeroFinal,
-      responsavel: els.inputResponsavel.value.trim(),
-      destino: els.inputDestino.value.trim(),
+      responsavel: (els.opResponsavel?.value || "").trim(),
+      destino: (els.opDestino?.value || "").trim(),
       dataHora: formatarDataHora(),
       itens: listaAtual.map((item) => ({
         ...item,
@@ -469,9 +484,9 @@
       return;
     }
 
-    const numeroLista = els.inputNumeroLista.value.trim();
-    const responsavel = els.inputResponsavel.value.trim();
-    const destino = els.inputDestino.value.trim();
+    const numeroLista = (els.opNumero?.value || "").trim();
+    const responsavel = (els.opResponsavel?.value || "").trim();
+    const destino = (els.opDestino?.value || "").trim();
     const dataHoje = formatarDataCurta();
 
     const bordaFina = {
@@ -675,49 +690,32 @@
     XLSX.writeFile(wb, `${nomeArquivoBase}.xlsx`);
   }
 
-  function limparCamposFormulario() {
-    els.inputCod.value = "";
-    els.inputQtd.value = "1";
-    els.selectUnidade.value = "cx";
-    els.selectMotivo.selectedIndex = 0;
-    els.inputObsItem.value = "";
+  function limparBuscaProduto() {
+    if (els.codInput) els.codInput.value = "";
     atualizarPreviewProduto();
-    els.inputCod.focus();
+    els.codInput?.focus();
   }
 
-  function iniciarNovaLista() {
-    if (listaAtual.length > 0) {
-      const confirmar = window.confirm("Deseja limpar todos os itens da lista atual para iniciar uma nova?");
-      if (!confirmar) return;
-    }
-
-    listaAtual = [];
-    els.inputNumeroLista.value = "";
-    els.inputResponsavel.value = "";
-    els.inputDestino.value = "";
-    salvarEstadoAtual();
-    renderizarListaAtual();
-    els.inputCod.focus();
-  }
-
-  function limparHistoricoCompleto() {
-    if (historicoListas.length === 0) return;
-    const confirmar = window.confirm("Tem certeza que deseja apagar todo o histórico de listas salvas?");
+  function limparListaAtual() {
+    if (listaAtual.length === 0) return;
+    const confirmar = window.confirm("Deseja limpar todos os itens da lista atual?");
     if (!confirmar) return;
 
-    historicoListas = [];
-    salvarHistoricoStorage();
-    renderizarHistorico();
+    listaAtual = [];
+    salvarEstadoAtual();
+    renderizarListaAtual();
+    definFeedback("Lista atual limpa.", "ok");
+    els.codInput?.focus();
   }
 
   function registrarEventos() {
-    els.inputCod.addEventListener("input", atualizarPreviewProduto);
-    els.inputCod.addEventListener("change", atualizarPreviewProduto);
+    els.codInput?.addEventListener("input", atualizarPreviewProduto);
+    els.codInput?.addEventListener("change", atualizarPreviewProduto);
+    els.btnLimparBusca?.addEventListener("click", limparBuscaProduto);
 
-    els.formSaida.addEventListener("submit", adicionarItemNaLista);
-    els.btnLimparCampos.addEventListener("click", limparCamposFormulario);
+    els.formSaida?.addEventListener("submit", adicionarItemNaLista);
 
-    els.tbodyItens.addEventListener("click", (evento) => {
+    els.tabelaSaidasBody?.addEventListener("click", (evento) => {
       const alvo = evento.target;
       if (!(alvo instanceof HTMLElement)) return;
 
@@ -729,15 +727,10 @@
       }
     });
 
-    [els.inputNumeroLista, els.inputResponsavel, els.inputDestino].forEach((campo) => {
-      campo.addEventListener("input", renderizarListaAtual);
-    });
-
-    els.btnSalvarLista.addEventListener("click", salvarListaNoHistorico);
-    els.btnExportarExcel.addEventListener("click", exportarExcel);
-    els.btnImprimir.addEventListener("click", () => window.print());
-    els.btnNovaLista.addEventListener("click", iniciarNovaLista);
-    els.btnLimparHistorico.addEventListener("click", limparHistoricoCompleto);
+    els.btnSalvarLista?.addEventListener("click", salvarListaNoHistorico);
+    els.btnExportXlsx?.addEventListener("click", exportarExcel);
+    els.btnImprimir?.addEventListener("click", () => window.print());
+    els.btnLimparLista?.addEventListener("click", limparListaAtual);
   }
 
   function init() {
