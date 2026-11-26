@@ -8,7 +8,7 @@ Aplicação web leve em HTML5, CSS3 e JavaScript puro para consultar itens por *
 * **Registro de saídas com unidade:** entrada de quantidade, seleção de unidade (`cx`, `un`, `kg`), forma de saída (`Venda`, `Consumo interno`, `Transferência`, `Devolução`, `Avaria / Descarte`, `Doação`, `Outro`) e observação opcional por item.
 * **Resumo e controle da lista:** total de itens e soma separada por unidade (`cx`, `un`, `kg`), metadados da operação (identificação da lista, responsável e destino/observação geral) e remoção individual ou limpeza completa.
 * **Histórico local (`localStorage`):** salva até 50 listas no navegador e permite reabrir qualquer lista salva para edição ou exportação.
-* **Exportação e impressão:** exporta a lista atual para `.xlsx` usando SheetJS (`xlsx.full.min.js`) e oferece visualização otimizada para impressão/PDF (`@media print`).
+* **Exportação e impressão:** exporta a lista atual para `.xlsx` estilizado via `xlsx-js-style` e oferece visualização otimizada para impressão/PDF (`@media print`).
 
 ## Estrutura de pastas
 
@@ -23,3 +23,4 @@ listacod/
 ├── README.md
 ├── DOCUMENTACAO.md
 └── CHANGELOG.md
+eof
